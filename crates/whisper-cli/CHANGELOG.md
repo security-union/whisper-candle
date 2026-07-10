@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/security-union/whisper-candle/compare/whisper-candle-cli-v0.1.0...whisper-candle-cli-v0.1.1) - 2026-07-10
+
+### Fixed
+
+- *(cli)* expose --version; release on any unpublished version bump
+
 ## [0.1.0](https://github.com/security-union/whisper-candle/releases/tag/whisper-candle-cli-v0.1.0) - 2026-07-10
 
 ### Other
