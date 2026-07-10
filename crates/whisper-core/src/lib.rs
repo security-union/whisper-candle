@@ -7,6 +7,7 @@ pub mod audio;
 pub mod decode;
 pub mod hub;
 pub mod model;
+pub mod nn;
 pub mod tokenizer;
 pub mod transcribe;
 pub mod utils;

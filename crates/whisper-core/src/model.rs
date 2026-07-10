@@ -1,14 +1,15 @@
 //! Thin wrapper around candle-transformers' Whisper model.
 //! Mirrors the properties of `whisper/model.py::Whisper`.
 
+use crate::nn;
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
-use candle_transformers::models::whisper::{model as m, Config};
+use candle_transformers::models::whisper::Config;
 use std::path::Path;
 
 pub struct WhisperModel {
-    inner: m::Whisper,
+    inner: nn::Whisper,
     pub config: Config,
     pub device: Device,
 }
@@ -21,7 +22,7 @@ impl WhisperModel {
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[weights_path.as_ref()], DType::F32, device)?
         };
-        let inner = m::Whisper::load(&vb, config.clone())?;
+        let inner = nn::Whisper::load(&vb, config.clone())?;
         Ok(Self { inner, config, device: device.clone() })
     }
 
@@ -46,9 +47,9 @@ impl WhisperModel {
         Ok(self.inner.encoder.forward(mel, flush)?)
     }
 
-    /// Decoder forward over the full token sequence -> hidden states
-    /// (batch, seq, d_model). `flush` recomputes the cross-attention KV cache;
-    /// pass true on the first call for a given set of audio features.
+    /// Incremental decoder forward -> hidden states (batch, seq, d_model).
+    /// Pass the full prompt with `flush = true` on the first call, then only
+    /// the newly sampled token(s) with `flush = false`.
     pub fn decoder_forward(&mut self, tokens: &Tensor, audio_features: &Tensor, flush: bool) -> Result<Tensor> {
         Ok(self.inner.decoder.forward(tokens, audio_features, flush)?)
     }

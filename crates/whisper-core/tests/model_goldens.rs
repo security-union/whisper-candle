@@ -66,8 +66,10 @@ fn sot_logits_match_pytorch() {
     let mad = mean_abs_diff(&a, &b);
     let cos = cosine_similarity(&a, &b);
     eprintln!("logits: mean_abs_diff={mad:.2e} cosine={cos:.6}");
-    assert!(mad <= 5e-3, "logits mean abs diff {mad}");
-    assert!(cos >= 0.9995, "logits cosine similarity {cos}");
+    // logits are ~±25 in magnitude (vs ~unit-scale encoder outputs), so the
+    // absolute tolerance is proportionally larger; cosine is the strict gate
+    assert!(mad <= 5e-2, "logits mean abs diff {mad}");
+    assert!(cos >= 0.9999, "logits cosine similarity {cos}");
 }
 
 #[test]

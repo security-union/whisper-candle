@@ -388,9 +388,16 @@ impl<'a> DecodingTask<'a> {
         let mut rng = rand::thread_rng();
 
         for i in 0..self.sample_len {
-            let seq_len = rows[0].len();
-            let flat: Vec<u32> = rows.iter().flatten().copied().collect();
-            let tokens_t = Tensor::from_vec(flat, (n, seq_len), &device)?;
+            // incremental decoding: full prompt on the first pass (flushing the
+            // KV cache), then only the last sampled token per step
+            let (tokens_t, step_len) = if i == 0 {
+                let seq_len = rows[0].len();
+                let flat: Vec<u32> = rows.iter().flatten().copied().collect();
+                (Tensor::from_vec(flat, (n, seq_len), &device)?, seq_len)
+            } else {
+                let last: Vec<u32> = rows.iter().map(|r| *r.last().unwrap()).collect();
+                (Tensor::from_vec(last, (n, 1), &device)?, 1)
+            };
             let hidden = self.model.decoder_forward(&tokens_t, &features, i == 0)?;
 
             if i == 0 {
@@ -401,7 +408,7 @@ impl<'a> DecodingTask<'a> {
                 no_speech_prob = probs[self.tokenizer.no_speech as usize] as f64;
             }
 
-            let logits_last = self.model.logits_at(&hidden, seq_len - 1)?;
+            let logits_last = self.model.logits_at(&hidden, step_len - 1)?;
             let logits_rows: Vec<Vec<f32>> = logits_last.to_vec2()?;
 
             let mut completed = true;
