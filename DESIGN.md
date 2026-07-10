@@ -1,13 +1,18 @@
 # whisper-rs — Pure-Rust Whisper Port on Candle
 
-**Status:** v1 · 2026-07-09 · **Phases 0–2 complete, Phase 3 partial**
+**Status:** v1 · 2026-07-09 · **Phases 0–4 complete** (minus two transcribe flags)
 
 > **Implementation status (2026-07-09):**
 > - Phases 0–2 done: all L0–L3 golden tests green, including **token-exact greedy
 >   decode parity with PyTorch** on whisper-tiny, and end-to-end flac
 >   transcription through the pure-Rust audio path.
-> - Phase 3 partial: temperature fallback ladder, best_of sampling, prompts,
->   language detection, all writers, CLI. Beam search still pending.
+> - Phase 3 done: **beam search is token-exact vs PyTorch** (python-dict candidate
+>   ordering + KV-cache reordering), temperature fallback ladder, best_of
+>   sampling, prompts, language detection, all writers, CLI.
+> - Phase 4 done: **word timestamps within 0.1s of PyTorch** — cross-attention QK
+>   capture (explicit return values instead of hooks), alignment heads from HF
+>   generation_config.json, DTW + median filter at exact fixture parity.
+>   Still pending: `hallucination_silence_threshold` and `carry_initial_prompt`.
 > - Model is vendored (`src/nn.rs`) with incremental KV-cache decoding.
 > - Metal backend works with **correct** transcripts (torch MPS produces garbage);
 >   base on Metal beats CPU (6.9s vs 11.1s on the 60s clip), tiny doesn't

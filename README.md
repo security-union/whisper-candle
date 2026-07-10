@@ -5,10 +5,11 @@ Pure-Rust port of [OpenAI Whisper](https://github.com/openai/whisper) built on
 PyTorch. Developed test-first against golden fixtures generated from the
 Python reference implementation (see [DESIGN.md](DESIGN.md)).
 
-**Status:** greedy transcription is at parity with PyTorch — token-exact on the
-test fixtures — including temperature-fallback, best_of sampling, language
-detection, prompts, and txt/srt/vtt/tsv/json writers. Beam search and word
-timestamps are in progress (see DESIGN.md §7).
+**Status:** transcription is at parity with PyTorch — greedy *and* beam-search
+decoding are token-exact on the test fixtures; word-level timestamps
+(`--word-timestamps`) match within 0.1s. Includes temperature-fallback, best_of
+sampling, language detection, prompts, and txt/srt/vtt/tsv/json writers.
+Remaining work is performance tuning and quantized models (DESIGN.md §7).
 
 ## Usage
 
