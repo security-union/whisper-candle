@@ -17,10 +17,14 @@
 > - Metal backend works with **correct** transcripts (torch MPS produces garbage);
 >   base on Metal beats CPU (6.9s vs 11.1s on the 60s clip), tiny doesn't
 >   (kernel-launch overhead dominates small models).
-> - Measured Rust CPU (M4 Max, accelerate): tiny 11s/0.29s ≈ 38× RTF,
->   60s/5.9s ≈ 10× RTF; base 11s/0.54s ≈ 20×, 60s/11.1s ≈ 5.4×. Python torch
->   CPU is still 5–20× faster on long clips → Phase 5 (per-step candle op
->   overhead, batching, f16/quantized paths).
+> - Phase 5 first pass done: KV caches now live in pre-scaled head layout, so
+>   the single-token decode step never re-lays-out the 1500-frame cross-attention
+>   keys (profiling showed that relayout was ~70% of the 6ms step; now 1.45ms).
+>   Measured on the 60s clip (M4 Max): CPU+accelerate tiny 2.0s (30× RTF),
+>   base 4.5s (13×), small 12.3s; Metal tiny 2.4s, base 3.1s, small 8.4s —
+>   Metal wins from base up. Python torch CPU remains ~4× faster (tiny 0.47s,
+>   base 1.0s): the residual gap is per-op overhead in candle's decode path →
+>   next levers are fused logit math, fewer allocations, quantized models.
 > - Known accepted deviations: resampled audio is not sample-exact vs ffmpeg
 >   (different sinc filters, fractional delay; RMS ≈ 0.02 on jfk.flac);
 >   compression_ratio uses zlib-rs (within ~2% of C zlib — only feeds the

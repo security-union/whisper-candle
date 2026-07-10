@@ -61,6 +61,10 @@ impl MultiHeadAttention {
     /// Self-attention (xa = None): with `use_cache`, new keys/values are
     /// appended to the cache and only the suffix is treated as queries.
     /// Cross-attention (xa = Some): keys/values computed once per flush.
+    ///
+    /// KV caches are kept in pre-scaled head layout (batch, heads, len,
+    /// head_dim) so the single-token decode path never re-lays-out the
+    /// (potentially 1500-frame) cross-attention keys.
     fn forward(
         &mut self,
         x: &Tensor,
@@ -70,11 +74,13 @@ impl MultiHeadAttention {
         use_cache: bool,
         want_qk: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        let q = self.query.forward(x)?;
+        let n_state = x.dim(2)?;
+        let scale = ((n_state / self.n_head) as f64).powf(-0.25);
+        let q = (self.reshape_head(&self.query.forward(x)?)? * scale)?;
         let (k, v) = match xa {
             None => {
-                let k_new = self.key.forward(x)?;
-                let v_new = self.value.forward(x)?;
+                let k_new = (self.reshape_head(&self.key.forward(x)?)? * scale)?;
+                let v_new = self.reshape_head(&self.value.forward(x)?)?;
                 if !use_cache {
                     (k_new, v_new)
                 } else {
@@ -83,30 +89,30 @@ impl MultiHeadAttention {
                     }
                     let (k, v) = match &self.kv_cache {
                         Some((pk, pv)) => (
-                            Tensor::cat(&[pk, &k_new], 1)?,
-                            Tensor::cat(&[pv, &v_new], 1)?,
+                            Tensor::cat(&[pk, &k_new], 2)?,
+                            Tensor::cat(&[pv, &v_new], 2)?,
                         ),
-                        None => (k_new, v_new),
+                        None => (k_new.contiguous()?, v_new.contiguous()?),
                     };
                     self.kv_cache = Some((k.clone(), v.clone()));
                     (k, v)
                 }
             }
-            Some(x) => {
+            Some(xa) => {
                 if flush_cache {
                     self.kv_cache = None;
                 }
                 if let Some((k, v)) = &self.kv_cache {
                     (k.clone(), v.clone())
                 } else {
-                    let k = self.key.forward(x)?;
-                    let v = self.value.forward(x)?;
+                    let k = (self.reshape_head(&self.key.forward(xa)?)? * scale)?.contiguous()?;
+                    let v = self.reshape_head(&self.value.forward(xa)?)?.contiguous()?;
                     self.kv_cache = Some((k.clone(), v.clone()));
                     (k, v)
                 }
             }
         };
-        let (wv, qk) = self.qkv_attention(&q, &k, &v, mask, want_qk)?;
+        let (wv, qk) = self.attend(&q, &k, &v, mask, want_qk)?;
         let out = self.out.forward(&wv)?;
         Ok((out, qk))
     }
@@ -117,10 +123,11 @@ impl MultiHeadAttention {
         x.reshape(target_dims)?.transpose(1, 2)
     }
 
-    /// Returns (weighted values, optional pre-softmax QK). The QK matrix
-    /// ((q*scale)@(k*scale)^T + mask) is what `timing.py` reads via forward
-    /// hooks for word-level alignment.
-    fn qkv_attention(
+    /// Attention over head-layout tensors: q (b,h,q_len,hd) pre-scaled,
+    /// k (b,h,k_len,hd) pre-scaled, v (b,h,k_len,hd). Returns (weighted
+    /// values flattened to (b,q_len,d), optional pre-softmax QK — the matrix
+    /// `timing.py` reads via forward hooks for word-level alignment).
+    fn attend(
         &self,
         q: &Tensor,
         k: &Tensor,
@@ -128,13 +135,17 @@ impl MultiHeadAttention {
         mask: Option<&Tensor>,
         want_qk: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        let (_, q_ctx, n_state) = q.dims3()?;
-        let (_, k_ctx, _) = k.dims3()?;
-        let scale = ((n_state / self.n_head) as f64).powf(-0.25);
-        let q = (self.reshape_head(q)? * scale)?;
-        let k = (self.reshape_head(k)?.transpose(2, 3)? * scale)?.contiguous()?;
-        let v = self.reshape_head(v)?.contiguous()?;
-        let mut qk = q.contiguous()?.matmul(&k)?;
+        let q_ctx = q.dim(2)?;
+        let k_ctx = k.dim(2)?;
+        let kt = k.transpose(2, 3)?;
+        // contiguous copies pay off on multi-token (prefill/encoder) passes,
+        // but dominate the single-token decode step; skip them there
+        let (q, kt, v) = if q_ctx > 1 {
+            (q.contiguous()?, kt.contiguous()?, v.contiguous()?)
+        } else {
+            (q.clone(), kt, v.clone())
+        };
+        let mut qk = q.matmul(&kt)?;
         if let Some(mask) = mask {
             // Only needed when several queries attend causally to each other,
             // i.e. the first pass where q_ctx == k_ctx. A single incremental
@@ -156,9 +167,10 @@ impl MultiHeadAttention {
     }
 
     fn cache_len(&self) -> usize {
+        // head-layout cache: (batch, heads, len, head_dim)
         self.kv_cache
             .as_ref()
-            .and_then(|(k, _)| k.dims().get(1).copied())
+            .and_then(|(k, _)| k.dims().get(2).copied())
             .unwrap_or(0)
     }
 }
