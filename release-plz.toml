@@ -2,8 +2,11 @@
 changelog_update = true
 git_tag_enable = true
 git_release_enable = true
-# release both crates together; core must publish before the cli that depends on it
-release_always = false
+# release_always defaults to true: any push to main publishes packages whose
+# Cargo.toml version isn't on crates.io yet. This lets a hotfix commit (e.g.
+# a publish blocker fixed after a release PR merged) complete the release
+# without manual `cargo publish` — which `release_always = false` blocked
+# for the v0.1.0 cli.
 
 [[package]]
 name = "whisper-candle-core"

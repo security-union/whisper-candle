@@ -9,6 +9,7 @@ use whisper_core::{DecodingOptions, Task, TranscribeOptions};
 #[derive(Parser, Debug)]
 #[command(
     name = "whisper-candle",
+    version,
     about = "Pure-Rust Whisper transcription on candle"
 )]
 struct Args {

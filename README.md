@@ -25,6 +25,13 @@ or C++ in the dependency tree.
 ## Quick start
 
 ```bash
+cargo install whisper-candle-cli
+whisper-candle audio.mp3 --model base --output-format srt -o out/
+```
+
+Or from a checkout:
+
+```bash
 cargo run --release --features accelerate -p whisper-candle-cli -- \
     audio.mp3 --model base --output-format srt -o out/
 ```
