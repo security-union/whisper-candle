@@ -1,6 +1,26 @@
 # whisper-rs — Pure-Rust Whisper Port on Candle
 
-**Status:** Draft v1 · 2026-07-09
+**Status:** v1 · 2026-07-09 · **Phases 0–2 complete, Phase 3 partial**
+
+> **Implementation status (2026-07-09):**
+> - Phases 0–2 done: all L0–L3 golden tests green, including **token-exact greedy
+>   decode parity with PyTorch** on whisper-tiny, and end-to-end flac
+>   transcription through the pure-Rust audio path.
+> - Phase 3 partial: temperature fallback ladder, best_of sampling, prompts,
+>   language detection, all writers, CLI. Beam search still pending.
+> - Model is vendored (`src/nn.rs`) with incremental KV-cache decoding.
+> - Metal backend works with **correct** transcripts (torch MPS produces garbage);
+>   base on Metal beats CPU (6.9s vs 11.1s on the 60s clip), tiny doesn't
+>   (kernel-launch overhead dominates small models).
+> - Measured Rust CPU (M4 Max, accelerate): tiny 11s/0.29s ≈ 38× RTF,
+>   60s/5.9s ≈ 10× RTF; base 11s/0.54s ≈ 20×, 60s/11.1s ≈ 5.4×. Python torch
+>   CPU is still 5–20× faster on long clips → Phase 5 (per-step candle op
+>   overhead, batching, f16/quantized paths).
+> - Known accepted deviations: resampled audio is not sample-exact vs ffmpeg
+>   (different sinc filters, fractional delay; RMS ≈ 0.02 on jfk.flac);
+>   compression_ratio uses zlib-rs (within ~2% of C zlib — only feeds the
+>   `> 2.4` threshold); language-token *order* matches by mapping, not by
+>   Python's set-iteration order.
 **Reference implementation:** `../whisper` (openai/whisper @ local checkout)
 **No C/C++ bindings.** All inference through [candle](https://github.com/huggingface/candle) (`candle-core` / `candle-nn` / `candle-transformers`).
 

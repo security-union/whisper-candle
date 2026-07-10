@@ -3,6 +3,7 @@
 //!   - incremental decoding: self-attention KV cache append + positional
 //!     offset, so each step feeds only the new token (the upstream version
 //!     recomputes the full sequence every step)
+//!
 //! Cross-attention QK capture for word timestamps lands in Phase 4.
 
 use candle_core::{Device, IndexOp, Result, Tensor, D};
