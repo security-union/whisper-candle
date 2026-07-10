@@ -1,6 +1,6 @@
 # whisper-rs — Pure-Rust Whisper Port on Candle
 
-**Status:** v1 · 2026-07-09 · **Phases 0–4 complete** (minus two transcribe flags)
+**Status:** v1 · 2026-07-09 · **Phases 0–4 complete; Phase 5 (perf) in progress**
 
 > **Implementation status (2026-07-09):**
 > - Phases 0–2 done: all L0–L3 golden tests green, including **token-exact greedy
