@@ -12,7 +12,8 @@
 > - Phase 4 done: **word timestamps within 0.1s of PyTorch** — cross-attention QK
 >   capture (explicit return values instead of hooks), alignment heads from HF
 >   generation_config.json, DTW + median filter at exact fixture parity.
->   Still pending: `hallucination_silence_threshold` and `carry_initial_prompt`.
+>   All transcribe flags are now ported, including `hallucination_silence_threshold`
+>   and `carry_initial_prompt`.
 > - Model is vendored (`src/nn.rs`) with incremental KV-cache decoding.
 > - Metal backend works with **correct** transcripts (torch MPS produces garbage);
 >   base on Metal beats CPU (6.9s vs 11.1s on the 60s clip), tiny doesn't

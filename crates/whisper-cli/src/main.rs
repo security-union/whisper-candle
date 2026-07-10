@@ -77,6 +77,15 @@ struct Args {
     #[arg(long, default_value_t = false)]
     word_timestamps: bool,
 
+    /// Prepend --initial-prompt to every window's prompt
+    #[arg(long, default_value_t = false)]
+    carry_initial_prompt: bool,
+
+    /// (requires --word-timestamps) skip silences longer than this many
+    /// seconds around probable hallucinations
+    #[arg(long)]
+    hallucination_silence_threshold: Option<f64>,
+
     /// Print progress and decoded text
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     verbose: bool,
@@ -137,6 +146,8 @@ fn main() -> Result<()> {
         initial_prompt: args.initial_prompt.clone(),
         clip_timestamps,
         word_timestamps: args.word_timestamps,
+        carry_initial_prompt: args.carry_initial_prompt,
+        hallucination_silence_threshold: args.hallucination_silence_threshold,
         decode_options: DecodingOptions {
             task,
             language,

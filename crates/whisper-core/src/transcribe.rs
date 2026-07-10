@@ -23,6 +23,12 @@ pub struct TranscribeOptions {
     pub no_speech_threshold: Option<f64>,
     pub condition_on_previous_text: bool,
     pub initial_prompt: Option<String>,
+    /// Prepend `initial_prompt` to every window's prompt (left-truncating the
+    /// carried context to fit).
+    pub carry_initial_prompt: bool,
+    /// With word_timestamps: skip silent periods longer than this (seconds)
+    /// when a probable hallucination is detected.
+    pub hallucination_silence_threshold: Option<f64>,
     /// start,end pairs in seconds; empty means the whole file.
     pub clip_timestamps: Vec<f64>,
     /// Extract word-level timestamps via cross-attention DTW alignment.
@@ -45,6 +51,8 @@ impl Default for TranscribeOptions {
             no_speech_threshold: Some(0.6),
             condition_on_previous_text: true,
             initial_prompt: None,
+            carry_initial_prompt: false,
+            hallucination_silence_threshold: None,
             clip_timestamps: Vec::new(),
             word_timestamps: false,
             prepend_punctuations: "\"'“¿([{-".to_string(),
@@ -171,6 +179,8 @@ pub fn transcribe(
         }
         None => Vec::new(),
     };
+    let remaining_prompt_length =
+        (model.n_text_ctx() / 2 - 1).saturating_sub(initial_prompt_tokens.len());
 
     let decode_with_fallback = |model: &mut WhisperModel,
                                 tokenizer: &Tokenizer,
@@ -233,6 +243,7 @@ pub fn transcribe(
             continue;
         }
         let time_offset = seek as f64 * HOP_LENGTH as f64 / SAMPLE_RATE as f64;
+        let window_end_time = (seek + N_FRAMES) as f64 * HOP_LENGTH as f64 / SAMPLE_RATE as f64;
         let segment_size = N_FRAMES
             .min(content_frames - seek)
             .min(seek_clip_end - seek);
@@ -241,7 +252,16 @@ pub fn transcribe(
 
         // when condition_on_previous_text is false, prompt_reset_since advances
         // to len(all_tokens) after every window, so this stays in sync with Python
-        let prompt = all_tokens[prompt_reset_since..].to_vec();
+        let prompt = if options.carry_initial_prompt {
+            let nignored = initial_prompt_tokens.len().max(prompt_reset_since);
+            let carried = &all_tokens[nignored..];
+            let carried = &carried[carried.len().saturating_sub(remaining_prompt_length)..];
+            let mut p = initial_prompt_tokens.clone();
+            p.extend_from_slice(carried);
+            p
+        } else {
+            all_tokens[prompt_reset_since..].to_vec()
+        };
 
         let result = decode_with_fallback(model, &tokenizer, &mel_segment, prompt)?;
         let tokens = &result.tokens;
@@ -359,6 +379,72 @@ pub fn transcribe(
                     }
                 }
             }
+
+            // skip silence before probable hallucinations (transcribe.py:418-476)
+            if let Some(threshold) = options.hallucination_silence_threshold {
+                if !single_timestamp_ending {
+                    if let Some(last_word_end) = get_end(&current_segments) {
+                        if last_word_end > time_offset {
+                            let remaining_duration = window_end_time - last_word_end;
+                            if remaining_duration > threshold {
+                                seek = (last_word_end * FRAMES_PER_SECOND as f64).round() as usize;
+                            } else {
+                                seek = previous_seek + segment_size;
+                            }
+                        }
+                    }
+                }
+
+                // if the first segment might be a hallucination, skip leading silence
+                if let Some(first) = next_words_segment(&current_segments) {
+                    if is_segment_anomaly(Some(first)) {
+                        let gap = first.start - time_offset;
+                        if gap > threshold {
+                            seek = previous_seek + (gap * FRAMES_PER_SECOND as f64).round() as usize;
+                            continue;
+                        }
+                    }
+                }
+
+                // skip silence before any hallucination surrounded by silence
+                let mut hal_last_end = last_speech_timestamp;
+                let mut truncate_at: Option<(usize, usize)> = None; // (segment idx, new seek)
+                for si in 0..current_segments.len() {
+                    let segment = &current_segments[si];
+                    if !has_words(segment) {
+                        continue;
+                    }
+                    if is_segment_anomaly(Some(segment)) {
+                        let next_segment = next_words_segment(&current_segments[si + 1..]);
+                        let hal_next_start = match next_segment {
+                            Some(s) => s.words.as_ref().unwrap()[0].start,
+                            None => time_offset + segment_duration,
+                        };
+                        let silence_before = segment.start - hal_last_end > threshold
+                            || segment.start < threshold
+                            || segment.start - time_offset < 2.0;
+                        let silence_after = hal_next_start - segment.end > threshold
+                            || is_segment_anomaly(next_segment)
+                            || window_end_time - segment.end < 2.0;
+                        if silence_before && silence_after {
+                            let mut new_seek = ((time_offset + 1.0).max(segment.start)
+                                * FRAMES_PER_SECOND as f64)
+                                .round() as usize;
+                            if content_duration - segment.end < threshold {
+                                new_seek = content_frames;
+                            }
+                            truncate_at = Some((si, new_seek));
+                            break;
+                        }
+                    }
+                    hal_last_end = segment.end;
+                }
+                if let Some((si, new_seek)) = truncate_at {
+                    seek = new_seek;
+                    current_segments.truncate(si);
+                }
+            }
+
             if let Some(last_word_end) = get_end(&current_segments) {
                 last_speech_timestamp = last_word_end;
             }
@@ -406,13 +492,56 @@ pub fn transcribe(
     if options.verbose == Some(false) {
         eprintln!();
     }
-    let _ = content_duration;
 
     Ok(TranscribeResult {
         text: tokenizer.decode(&all_tokens[initial_prompt_tokens.len()..]),
         segments: all_segments,
         language,
     })
+}
+
+fn has_words(segment: &Segment) -> bool {
+    segment.words.as_ref().is_some_and(|w| !w.is_empty())
+}
+
+fn next_words_segment(segments: &[Segment]) -> Option<&Segment> {
+    segments.iter().find(|s| has_words(s))
+}
+
+/// Anomalous words are very long/short/improbable (transcribe.py:316-326).
+fn word_anomaly_score(word: &Word) -> f64 {
+    let duration = word.end - word.start;
+    let mut score = 0.0;
+    if word.probability < 0.15 {
+        score += 1.0;
+    }
+    if duration < 0.133 {
+        score += (0.133 - duration) * 15.0;
+    }
+    if duration > 2.0 {
+        score += duration - 2.0;
+    }
+    score
+}
+
+fn is_segment_anomaly(segment: Option<&Segment>) -> bool {
+    // prepend + append punctuation sets concatenated (transcribe.py:179);
+    // like Python, `word in punctuation` is a substring test
+    const PUNCTUATION: &str = "\"'“¿([{-\"'.。,，!！?？:：”)]}、";
+    let Some(segment) = segment else { return false };
+    if !has_words(segment) {
+        return false;
+    }
+    let words: Vec<&Word> = segment
+        .words
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|w| !PUNCTUATION.contains(&w.word))
+        .take(8)
+        .collect();
+    let score: f64 = words.iter().map(|w| word_anomaly_score(w)).sum();
+    score >= 3.0 || score + 0.01 >= words.len() as f64
 }
 
 /// Last word-end time across segments (utils.py::get_end).
