@@ -317,6 +317,27 @@ impl TextDecoder {
         self.blocks.first().map(|b| b.attn.cache_len()).unwrap_or(0)
     }
 
+    /// Reorder the self-attention KV caches along the batch dimension so beam
+    /// candidates continue from the right prefixes. Mirrors
+    /// `decoding.py::PyTorchInference.rearrange_kv_cache` (cross-attention
+    /// caches hold identical rows per beam and are left untouched).
+    pub fn rearrange_kv_cache(&mut self, source_indices: &[usize]) -> Result<()> {
+        if source_indices.iter().enumerate().all(|(i, &s)| i == s) {
+            return Ok(());
+        }
+        let device = self.mask.device().clone();
+        let idx: Vec<u32> = source_indices.iter().map(|&i| i as u32).collect();
+        let idx = Tensor::from_vec(idx, source_indices.len(), &device)?;
+        for block in self.blocks.iter_mut() {
+            if let Some((k, v)) = &block.attn.kv_cache {
+                let k = k.index_select(&idx, 0)?;
+                let v = v.index_select(&idx, 0)?;
+                block.attn.kv_cache = Some((k, v));
+            }
+        }
+        Ok(())
+    }
+
     pub fn final_linear(&self, x: &Tensor) -> Result<Tensor> {
         let b_size = x.dim(0)?;
         let w = self.token_embedding.embeddings().broadcast_left(b_size)?;

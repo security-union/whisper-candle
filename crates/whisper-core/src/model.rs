@@ -68,4 +68,9 @@ impl WhisperModel {
     pub fn reset_kv_cache(&mut self) {
         self.inner.reset_kv_cache();
     }
+
+    /// Reorder decoder self-attention KV caches for beam search.
+    pub fn rearrange_kv_cache(&mut self, source_indices: &[usize]) -> Result<()> {
+        Ok(self.inner.decoder.rearrange_kv_cache(source_indices)?)
+    }
 }

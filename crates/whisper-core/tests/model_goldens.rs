@@ -123,6 +123,32 @@ fn greedy_decode_matches_pytorch() {
 
 #[test]
 #[ignore = "downloads whisper-tiny"]
+fn beam_search_matches_pytorch() {
+    let g = load_json("decode_goldens_tiny.json");
+    let expected_tokens: Vec<u32> = g["beam5"]["tokens"]
+        .as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as u32).collect();
+    let expected_text = g["beam5"]["text"].as_str().unwrap();
+    let expected_avg_logprob = g["beam5"]["avg_logprob"].as_f64().unwrap();
+
+    let mut model = load_tiny();
+    let tok = get_tokenizer(true, model.num_languages(), Some("en"), Some(Task::Transcribe)).unwrap();
+    let mel = jfk_mel_window(&model);
+    let options = DecodingOptions {
+        language: Some("en".to_string()),
+        beam_size: Some(5),
+        ..Default::default()
+    };
+    let result = whisper_core::decode(&mut model, &tok, &mel, options).unwrap();
+
+    eprintln!("text: {}", result.text);
+    eprintln!("avg_logprob: {:.4} (python {expected_avg_logprob:.4})", result.avg_logprob);
+    assert_eq!(result.text, expected_text, "beam transcript text");
+    assert_eq!(result.tokens, expected_tokens, "beam token-level parity");
+    assert!((result.avg_logprob - expected_avg_logprob).abs() < 0.02, "avg_logprob");
+}
+
+#[test]
+#[ignore = "downloads whisper-tiny"]
 fn transcribe_segments_match_pytorch() {
     let g = load_json("decode_goldens_tiny.json");
     let t = &g["transcribe"];

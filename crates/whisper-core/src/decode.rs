@@ -235,10 +235,17 @@ fn logsumexp(logprobs: &[f32]) -> f32 {
     max + sum.ln()
 }
 
+enum DecoderKind {
+    Greedy { temperature: f64 },
+    /// Port of `decoding.py::BeamSearchDecoder` (beam ignores temperature).
+    Beam { beam_size: usize, max_candidates: usize },
+}
+
 pub struct DecodingTask<'a> {
     model: &'a mut WhisperModel,
     tokenizer: &'a Tokenizer,
     options: DecodingOptions,
+    kind: DecoderKind,
     n_group: usize,
     n_ctx: usize,
     sample_len: usize,
@@ -254,11 +261,14 @@ impl<'a> DecodingTask<'a> {
         tokenizer: &'a Tokenizer,
         options: DecodingOptions,
     ) -> Result<Self> {
-        if options.beam_size.is_some() {
-            bail!("beam search is not implemented yet; use greedy (temperature=0) or best_of sampling");
+        if options.beam_size.is_some() && options.best_of.is_some() {
+            bail!("beam_size and best_of can't be given together");
         }
         if options.temperature == 0.0 && options.best_of.is_some() {
             bail!("best_of with greedy sampling (temperature=0) is not compatible");
+        }
+        if options.patience.is_some() && options.beam_size.is_none() {
+            bail!("patience requires beam_size to be given");
         }
         if let Some(lp) = options.length_penalty {
             if !(0.0..=1.0).contains(&lp) {
@@ -266,6 +276,17 @@ impl<'a> DecodingTask<'a> {
             }
         }
 
+        let kind = match options.beam_size {
+            Some(beam_size) => {
+                let patience = options.patience.unwrap_or(1.0);
+                let max_candidates = (beam_size as f64 * patience).round() as usize;
+                if max_candidates == 0 {
+                    bail!("invalid beam size ({beam_size}) or patience ({patience})");
+                }
+                DecoderKind::Beam { beam_size, max_candidates }
+            }
+            None => DecoderKind::Greedy { temperature: options.temperature },
+        };
         let n_group = options.beam_size.or(options.best_of).unwrap_or(1);
         let n_ctx = model.n_text_ctx();
         let sample_len = options.sample_len.unwrap_or(n_ctx / 2);
@@ -347,6 +368,7 @@ impl<'a> DecodingTask<'a> {
             model,
             tokenizer,
             options,
+            kind,
             n_group,
             n_ctx,
             sample_len,
@@ -386,6 +408,8 @@ impl<'a> DecodingTask<'a> {
         let mut no_speech_prob = f64::NAN;
         let eot = self.tokenizer.eot;
         let mut rng = rand::thread_rng();
+        // beam search: finished sequences in python-dict insertion order
+        let mut finished: Vec<(Vec<u32>, f64)> = Vec::new();
 
         for i in 0..self.sample_len {
             // incremental decoding: full prompt on the first pass (flushing the
@@ -411,40 +435,83 @@ impl<'a> DecodingTask<'a> {
             let logits_last = self.model.logits_at(&hidden, step_len - 1)?;
             let logits_rows: Vec<Vec<f32>> = logits_last.to_vec2()?;
 
-            let mut completed = true;
-            for (g, mut logits) in logits_rows.into_iter().enumerate() {
+            let mut filtered: Vec<Vec<f32>> = logits_rows;
+            for (g, logits) in filtered.iter_mut().enumerate() {
                 for filter in &self.filters {
-                    filter.apply(&mut logits, &rows[g]);
-                }
-
-                let last = *rows[g].last().unwrap();
-                let next = if last == eot {
-                    eot
-                } else {
-                    let chosen = if self.options.temperature == 0.0 {
-                        argmax(&logits)
-                    } else {
-                        sample_gumbel(&logits, self.options.temperature, &mut rng)
-                    };
-                    let logprobs = log_softmax(&logits);
-                    sum_logprobs[g] += logprobs[chosen as usize] as f64;
-                    chosen
-                };
-                rows[g].push(next);
-                if next != eot {
-                    completed = false;
+                    filter.apply(logits, &rows[g]);
                 }
             }
+
+            let completed = match self.kind {
+                DecoderKind::Greedy { temperature } => {
+                    let mut all_eot = true;
+                    for (g, logits) in filtered.iter().enumerate() {
+                        let last = *rows[g].last().unwrap();
+                        let next = if last == eot {
+                            eot
+                        } else {
+                            let chosen = if temperature == 0.0 {
+                                argmax(logits)
+                            } else {
+                                sample_gumbel(logits, temperature, &mut rng)
+                            };
+                            let logprobs = log_softmax(logits);
+                            sum_logprobs[g] += logprobs[chosen as usize] as f64;
+                            chosen
+                        };
+                        rows[g].push(next);
+                        if next != eot {
+                            all_eot = false;
+                        }
+                    }
+                    all_eot
+                }
+                DecoderKind::Beam { beam_size, max_candidates } => beam_update(
+                    self.model,
+                    &mut rows,
+                    &mut sum_logprobs,
+                    &mut finished,
+                    &filtered,
+                    beam_size,
+                    max_candidates,
+                    eot,
+                )?,
+            };
 
             if completed || rows[0].len() > self.n_ctx {
                 break;
             }
         }
 
-        // finalize: ensure a trailing eot, slice sample_begin..eot
-        let sliced: Vec<Vec<u32>> = rows
+        // final candidates: (full token sequence, cumulative logprob)
+        let candidates: Vec<(Vec<u32>, f64)> = match self.kind {
+            DecoderKind::Greedy { .. } => rows.into_iter().zip(sum_logprobs).collect(),
+            DecoderKind::Beam { beam_size, .. } => {
+                let mut cands = finished;
+                if cands.len() < beam_size {
+                    // not enough finished sequences: pad with the best
+                    // unfinished rows, eot-terminated (decoding.py::finalize)
+                    let mut order: Vec<usize> = (0..rows.len()).collect();
+                    order.sort_by(|&a, &b| {
+                        sum_logprobs[b].partial_cmp(&sum_logprobs[a]).unwrap()
+                    });
+                    for j in order {
+                        if cands.len() >= beam_size {
+                            break;
+                        }
+                        let mut seq = rows[j].clone();
+                        seq.push(eot);
+                        cands.push((seq, sum_logprobs[j]));
+                    }
+                }
+                cands
+            }
+        };
+
+        // slice sample_begin..first eot
+        let sliced: Vec<Vec<u32>> = candidates
             .iter()
-            .map(|row| {
+            .map(|(row, _)| {
                 let end = row[self.sample_begin..]
                     .iter()
                     .position(|&t| t == eot)
@@ -455,7 +522,7 @@ impl<'a> DecodingTask<'a> {
             .collect();
 
         // MaximumLikelihoodRanker
-        let selected = (0..n)
+        let selected = (0..candidates.len())
             .max_by(|&a, &b| {
                 let score = |g: usize| {
                     let length = sliced[g].len() as f64;
@@ -463,7 +530,7 @@ impl<'a> DecodingTask<'a> {
                         None => length,
                         Some(alpha) => ((5.0 + length) / 6.0).powf(alpha),
                     };
-                    sum_logprobs[g] / penalty
+                    candidates[g].1 / penalty
                 };
                 score(a).partial_cmp(&score(b)).unwrap()
             })
@@ -471,7 +538,7 @@ impl<'a> DecodingTask<'a> {
 
         let tokens = sliced[selected].clone();
         let text = self.tokenizer.decode(&tokens).trim().to_string();
-        let avg_logprob = sum_logprobs[selected] / (tokens.len() as f64 + 1.0);
+        let avg_logprob = candidates[selected].1 / (tokens.len() as f64 + 1.0);
 
         Ok(DecodingResult {
             language,
@@ -483,6 +550,97 @@ impl<'a> DecodingTask<'a> {
             temperature: self.options.temperature,
         })
     }
+}
+
+/// One beam-search step. Port of `decoding.py::BeamSearchDecoder.update`:
+/// expand each beam with its top (beam_size + 1) continuations, dedup by
+/// sequence (dict semantics: first insertion position, last value), keep the
+/// top beam_size unfinished, bank eot-terminated ones, and reorder the KV
+/// cache to the surviving beams' source rows. Returns true when
+/// `max_candidates` sequences have finished.
+#[allow(clippy::too_many_arguments)]
+fn beam_update(
+    model: &mut WhisperModel,
+    rows: &mut Vec<Vec<u32>>,
+    sum_logprobs: &mut Vec<f64>,
+    finished: &mut Vec<(Vec<u32>, f64)>,
+    filtered_logits: &[Vec<f32>],
+    beam_size: usize,
+    max_candidates: usize,
+    eot: u32,
+) -> Result<bool> {
+    // candidate pool in python-dict insertion order
+    let mut order: Vec<Vec<u32>> = Vec::with_capacity(rows.len() * (beam_size + 1));
+    let mut pool: HashMap<Vec<u32>, (f64, usize)> = HashMap::new();
+    for (j, logits) in filtered_logits.iter().enumerate() {
+        let logprobs = log_softmax(logits);
+        for (token, lp) in topk(&logprobs, beam_size + 1) {
+            let mut seq = rows[j].clone();
+            seq.push(token);
+            let score = sum_logprobs[j] + lp as f64;
+            match pool.get_mut(&seq) {
+                Some(entry) => *entry = (score, j), // keep position, take last value
+                None => {
+                    order.push(seq.clone());
+                    pool.insert(seq, (score, j));
+                }
+            }
+        }
+    }
+    // stable sort by score descending preserves dict order on ties
+    order.sort_by(|a, b| pool[b].0.partial_cmp(&pool[a].0).unwrap());
+
+    let mut new_rows: Vec<Vec<u32>> = Vec::with_capacity(beam_size);
+    let mut new_lps: Vec<f64> = Vec::with_capacity(beam_size);
+    let mut sources: Vec<usize> = Vec::with_capacity(beam_size);
+    let mut newly_finished: Vec<(Vec<u32>, f64)> = Vec::new();
+    for seq in order {
+        let (score, src) = pool[&seq];
+        if *seq.last().unwrap() == eot {
+            newly_finished.push((seq, score));
+        } else {
+            new_rows.push(seq);
+            new_lps.push(score);
+            sources.push(src);
+            if new_rows.len() == beam_size {
+                break; // python breaks the whole scan here
+            }
+        }
+    }
+
+    if new_rows.is_empty() {
+        bail!("beam search: no unfinished candidates to continue");
+    }
+    model.rearrange_kv_cache(&sources)?;
+    *rows = new_rows;
+    *sum_logprobs = new_lps;
+
+    for (seq, score) in newly_finished {
+        if finished.len() >= max_candidates {
+            break;
+        }
+        finished.push((seq, score));
+    }
+    Ok(finished.len() >= max_candidates)
+}
+
+/// Top-k (value, index) selection, descending, ties by lower index first
+/// (matching torch.topk ordering).
+fn topk(values: &[f32], k: usize) -> Vec<(u32, f32)> {
+    let mut top: Vec<(u32, f32)> = Vec::with_capacity(k + 1);
+    for (i, &v) in values.iter().enumerate() {
+        if top.len() < k || v > top[top.len() - 1].1 {
+            let pos = top
+                .iter()
+                .position(|&(_, tv)| v > tv)
+                .unwrap_or(top.len());
+            top.insert(pos, (i as u32, v));
+            if top.len() > k {
+                top.pop();
+            }
+        }
+    }
+    top
 }
 
 fn softmax(logits: &[f32]) -> Vec<f32> {
