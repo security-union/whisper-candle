@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "date": "2026-07-09 22:39",
+    "torch": "2.8.0",
+    "python": "3.9.6",
+    "machine": "arm64",
+    "cpu": "Apple M4 Max",
+    "runs": 3,
+    "clip_durations_s": {
+      "jfk_11s": 11.0,
+      "jfk_60s": 60.0
+    }
+  },
+  "results": [
+    {
+      "model": "tiny",
+      "device": "mps",
+      "fp16": true,
+      "clip": "jfk_11s",
+      "load_s": 0.27,
+      "wall_best_s": 1.733,
+      "wall_median_s": 1.748,
+      "rtf_best": 6.35,
+      "rtf_median": 6.29,
+      "text": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    },
+    {
+      "model": "tiny",
+      "device": "mps",
+      "fp16": true,
+      "clip": "jfk_60s",
+      "load_s": 0.27,
+      "wall_best_s": 3.523,
+      "wall_median_s": 3.619,
+      "rtf_best": 17.03,
+      "rtf_median": 16.58,
+      "text": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    },
+    {
+      "model": "base",
+      "device": "mps",
+      "fp16": true,
+      "clip": "jfk_11s",
+      "load_s": 0.38,
+      "wall_best_s": 0.097,
+      "wall_median_s": 0.128,
+      "rtf_best": 113.53,
+      "rtf_median": 85.66,
+      "text": "is all."
+    },
+    {
+      "model": "base",
+      "device": "mps",
+      "fp16": true,
+      "clip": "jfk_60s",
+      "load_s": 0.38,
+      "wall_best_s": 3.004,
+      "wall_median_s": 4.743,
+      "rtf_best": 19.97,
+      "rtf_median": 12.65,
+      "text": "Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. Are. "
+    }
+  ]
+}

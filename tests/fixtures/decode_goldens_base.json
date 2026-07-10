@@ -1,0 +1,387 @@
+{
+  "model": "base",
+  "dims": {
+    "n_mels": 80,
+    "n_audio_ctx": 1500,
+    "n_audio_state": 512,
+    "n_audio_head": 8,
+    "n_audio_layer": 6,
+    "n_vocab": 51865,
+    "n_text_ctx": 448,
+    "n_text_state": 512,
+    "n_text_head": 8,
+    "n_text_layer": 6
+  },
+  "sot_sequence": [
+    50258,
+    50259,
+    50359
+  ],
+  "detect_language_top10": [
+    [
+      "en",
+      0.9590191841125488
+    ],
+    [
+      "pt",
+      0.006905869580805302
+    ],
+    [
+      "es",
+      0.004148256499320269
+    ],
+    [
+      "la",
+      0.0024023312143981457
+    ],
+    [
+      "ar",
+      0.0019773668609559536
+    ],
+    [
+      "fr",
+      0.001930500497110188
+    ],
+    [
+      "el",
+      0.001784425345249474
+    ],
+    [
+      "de",
+      0.001759396051056683
+    ],
+    [
+      "nl",
+      0.0016383335459977388
+    ],
+    [
+      "it",
+      0.0014394639292731881
+    ]
+  ],
+  "greedy": {
+    "tokens": [
+      50364,
+      400,
+      370,
+      452,
+      7177,
+      6280,
+      11,
+      1029,
+      406,
+      437,
+      428,
+      1941,
+      393,
+      360,
+      337,
+      291,
+      11,
+      1029,
+      437,
+      291,
+      393,
+      360,
+      337,
+      428,
+      1941,
+      13,
+      50914
+    ],
+    "text": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+    "avg_logprob": -0.29686641693115234,
+    "no_speech_prob": 0.04440176486968994,
+    "compression_ratio": 1.3544303797468353
+  },
+  "beam5": {
+    "tokens": [
+      50364,
+      400,
+      370,
+      452,
+      7177,
+      6280,
+      11,
+      1029,
+      406,
+      437,
+      428,
+      1941,
+      393,
+      360,
+      337,
+      291,
+      11,
+      1029,
+      437,
+      291,
+      393,
+      360,
+      337,
+      428,
+      1941,
+      13,
+      50914
+    ],
+    "text": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+    "avg_logprob": -0.29686641693115234,
+    "no_speech_prob": 0.04440198093652725,
+    "compression_ratio": 1.3544303797468353
+  },
+  "transcribe": {
+    "text": " And so my fellow Americans ask not what your country can do for you, ask what you can do for your country.",
+    "language": "en",
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 7.6000000000000005,
+        "text": " And so my fellow Americans ask not what your country can do for you,",
+        "tokens": [
+          50364,
+          400,
+          370,
+          452,
+          7177,
+          6280,
+          1029,
+          406,
+          437,
+          428,
+          1941,
+          393,
+          360,
+          337,
+          291,
+          11,
+          50744
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.39659976959228516,
+        "compression_ratio": 1.3417721518987342,
+        "no_speech_prob": 0.09206891804933548
+      },
+      {
+        "id": 1,
+        "seek": 0,
+        "start": 7.6000000000000005,
+        "end": 10.6,
+        "text": " ask what you can do for your country.",
+        "tokens": [
+          50744,
+          1029,
+          437,
+          291,
+          393,
+          360,
+          337,
+          428,
+          1941,
+          13,
+          50894
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.39659976959228516,
+        "compression_ratio": 1.3417721518987342,
+        "no_speech_prob": 0.09206891804933548
+      }
+    ]
+  },
+  "transcribe_word_timestamps": {
+    "text": " And so my fellow Americans ask not what your country can do for you, ask what you can do for your country.",
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 7.42,
+        "text": " And so my fellow Americans ask not what your country can do for you,",
+        "tokens": [
+          50364,
+          400,
+          370,
+          452,
+          7177,
+          6280,
+          1029,
+          406,
+          437,
+          428,
+          1941,
+          393,
+          360,
+          337,
+          291,
+          11,
+          50744
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.39659976959228516,
+        "compression_ratio": 1.3417721518987342,
+        "no_speech_prob": 0.09206891804933548,
+        "words": [
+          {
+            "word": " And",
+            "start": 0.0,
+            "end": 0.52,
+            "probability": 0.6432371735572815
+          },
+          {
+            "word": " so",
+            "start": 0.52,
+            "end": 0.84,
+            "probability": 0.9871368408203125
+          },
+          {
+            "word": " my",
+            "start": 0.84,
+            "end": 1.18,
+            "probability": 0.7964146137237549
+          },
+          {
+            "word": " fellow",
+            "start": 1.18,
+            "end": 1.56,
+            "probability": 0.9955064058303833
+          },
+          {
+            "word": " Americans",
+            "start": 1.56,
+            "end": 2.1,
+            "probability": 0.9258847236633301
+          },
+          {
+            "word": " ask",
+            "start": 2.1,
+            "end": 3.72,
+            "probability": 0.28359904885292053
+          },
+          {
+            "word": " not",
+            "start": 3.72,
+            "end": 4.24,
+            "probability": 0.6561266183853149
+          },
+          {
+            "word": " what",
+            "start": 4.24,
+            "end": 5.52,
+            "probability": 0.7547564506530762
+          },
+          {
+            "word": " your",
+            "start": 5.52,
+            "end": 5.76,
+            "probability": 0.9823544025421143
+          },
+          {
+            "word": " country",
+            "start": 5.76,
+            "end": 6.24,
+            "probability": 0.9989206790924072
+          },
+          {
+            "word": " can",
+            "start": 6.24,
+            "end": 6.62,
+            "probability": 0.9966164231300354
+          },
+          {
+            "word": " do",
+            "start": 6.62,
+            "end": 6.82,
+            "probability": 0.9948687553405762
+          },
+          {
+            "word": " for",
+            "start": 6.82,
+            "end": 7.08,
+            "probability": 0.9948537945747375
+          },
+          {
+            "word": " you,",
+            "start": 7.08,
+            "end": 7.42,
+            "probability": 0.9964401125907898
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "seek": 0,
+        "start": 7.42,
+        "end": 10.36,
+        "text": " ask what you can do for your country.",
+        "tokens": [
+          50744,
+          1029,
+          437,
+          291,
+          393,
+          360,
+          337,
+          428,
+          1941,
+          13,
+          50894
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.39659976959228516,
+        "compression_ratio": 1.3417721518987342,
+        "no_speech_prob": 0.09206891804933548,
+        "words": [
+          {
+            "word": " ask",
+            "start": 7.42,
+            "end": 8.46,
+            "probability": 0.9025336503982544
+          },
+          {
+            "word": " what",
+            "start": 8.46,
+            "end": 8.76,
+            "probability": 0.9623399972915649
+          },
+          {
+            "word": " you",
+            "start": 8.76,
+            "end": 9.04,
+            "probability": 0.986506462097168
+          },
+          {
+            "word": " can",
+            "start": 9.04,
+            "end": 9.32,
+            "probability": 0.9966442584991455
+          },
+          {
+            "word": " do",
+            "start": 9.32,
+            "end": 9.56,
+            "probability": 0.9923428893089294
+          },
+          {
+            "word": " for",
+            "start": 9.56,
+            "end": 9.78,
+            "probability": 0.9964696168899536
+          },
+          {
+            "word": " your",
+            "start": 9.78,
+            "end": 9.94,
+            "probability": 0.9963908791542053
+          },
+          {
+            "word": " country.",
+            "start": 9.94,
+            "end": 10.36,
+            "probability": 0.9990676045417786
+          }
+        ]
+      }
+    ]
+  }
+}

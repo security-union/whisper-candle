@@ -1,0 +1,42 @@
+{
+  "compression_ratio": [
+    {
+      "text": "hello hello hello hello hello hello hello hello",
+      "ratio": 2.764705882352941
+    },
+    {
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "ratio": 0.8627450980392157
+    },
+    {
+      "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ratio": 4.0
+    },
+    {
+      "text": "And so my fellow Americans, ask not what your country can do for you.",
+      "ratio": 0.9857142857142858
+    }
+  ],
+  "format_timestamp": [
+    {
+      "seconds": 0.0,
+      "formatted": "00:00.000"
+    },
+    {
+      "seconds": 1.5,
+      "formatted": "00:01.500"
+    },
+    {
+      "seconds": 61.02,
+      "formatted": "01:01.020"
+    },
+    {
+      "seconds": 3599.999,
+      "formatted": "59:59.999"
+    },
+    {
+      "seconds": 3661.5,
+      "formatted": "01:01:01.500"
+    }
+  ]
+}
