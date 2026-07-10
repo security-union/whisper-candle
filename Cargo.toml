@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = ["crates/whisper-core", "crates/whisper-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/security-union/whisper-rs"
+
+[workspace.dependencies]
+candle-core = "0.9"
+candle-nn = "0.9"
+candle-transformers = "0.9"
+tiktoken-rs = "0.7"
+rustc-hash = "1.1"
+realfft = "3.3"
+symphonia = { version = "0.5", default-features = false, features = ["flac", "wav", "mp3", "isomp4", "aac", "pcm"] }
+rubato = "0.16"
+hf-hub = "0.4"
+# zlib-rs backend: pure Rust, byte-compatible with zlib so compression_ratio
+# thresholds match the Python reference (miniz_oxide sizes differ)
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+rand = "0.8"
+rand_distr = "0.4"
+approx = "0.5"
