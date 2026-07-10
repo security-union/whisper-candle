@@ -184,6 +184,58 @@ fn transcribe_segments_match_pytorch() {
 
 #[test]
 #[ignore = "downloads whisper-tiny"]
+fn word_timestamps_match_pytorch() {
+    let g = load_json("decode_goldens_tiny.json");
+    let expected_segments = g["transcribe_word_timestamps"]["segments"].as_array().unwrap();
+    let expected_words: Vec<&serde_json::Value> = expected_segments
+        .iter()
+        .flat_map(|s| s["words"].as_array().unwrap())
+        .collect();
+
+    let mut model = load_tiny();
+    // official alignment heads for tiny (generation_config.json on HF)
+    let files = whisper_core::fetch_model(whisper_core::WhichModel::Tiny).unwrap();
+    if let Some(gc) = &files.generation_config {
+        model.set_alignment_heads_from_file(gc).unwrap();
+    }
+    assert!(model.alignment_heads.is_some(), "tiny should have alignment heads on HF");
+
+    let options = TranscribeOptions {
+        temperatures: vec![0.0],
+        word_timestamps: true,
+        decode_options: DecodingOptions {
+            language: Some("en".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let pcm = Tensor::read_npy(fixtures_dir().join("audio_jfk_pcm.npy"))
+        .unwrap()
+        .to_vec1::<f32>()
+        .unwrap();
+    let result = whisper_core::transcribe(&mut model, &pcm, &options).unwrap();
+
+    let words: Vec<&whisper_core::transcribe::Word> = result
+        .segments
+        .iter()
+        .flat_map(|s| s.words.as_deref().unwrap_or(&[]))
+        .collect();
+    for w in &words {
+        eprintln!("{:>12} {:6.2} - {:6.2} p={:.3}", w.word, w.start, w.end, w.probability);
+    }
+    assert_eq!(words.len(), expected_words.len(), "word count");
+    for (w, e) in words.iter().zip(&expected_words) {
+        assert_eq!(w.word, e["word"].as_str().unwrap(), "word text");
+        let es = e["start"].as_f64().unwrap();
+        let ee = e["end"].as_f64().unwrap();
+        assert!((w.start - es).abs() <= 0.1, "word {:?} start {} vs {es}", w.word, w.start);
+        assert!((w.end - ee).abs() <= 0.1, "word {:?} end {} vs {ee}", w.word, w.end);
+        assert!((w.probability - e["probability"].as_f64().unwrap()).abs() <= 0.05, "probability");
+    }
+}
+
+#[test]
+#[ignore = "downloads whisper-tiny"]
 fn end_to_end_flac_transcription() {
     // full pipeline including symphonia decode + rubato resample; asserts the
     // transcript text only (audio path is not sample-exact vs ffmpeg)

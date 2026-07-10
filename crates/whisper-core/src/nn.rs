@@ -68,7 +68,8 @@ impl MultiHeadAttention {
         mask: Option<&Tensor>,
         flush_cache: bool,
         use_cache: bool,
-    ) -> Result<Tensor> {
+        want_qk: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
         let q = self.query.forward(x)?;
         let (k, v) = match xa {
             None => {
@@ -105,9 +106,9 @@ impl MultiHeadAttention {
                 }
             }
         };
-        let wv = self.qkv_attention(&q, &k, &v, mask)?;
+        let (wv, qk) = self.qkv_attention(&q, &k, &v, mask, want_qk)?;
         let out = self.out.forward(&wv)?;
-        Ok(out)
+        Ok((out, qk))
     }
 
     fn reshape_head(&self, x: &Tensor) -> Result<Tensor> {
@@ -116,7 +117,17 @@ impl MultiHeadAttention {
         x.reshape(target_dims)?.transpose(1, 2)
     }
 
-    fn qkv_attention(&self, q: &Tensor, k: &Tensor, v: &Tensor, mask: Option<&Tensor>) -> Result<Tensor> {
+    /// Returns (weighted values, optional pre-softmax QK). The QK matrix
+    /// ((q*scale)@(k*scale)^T + mask) is what `timing.py` reads via forward
+    /// hooks for word-level alignment.
+    fn qkv_attention(
+        &self,
+        q: &Tensor,
+        k: &Tensor,
+        v: &Tensor,
+        mask: Option<&Tensor>,
+        want_qk: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
         let (_, q_ctx, n_state) = q.dims3()?;
         let (_, k_ctx, _) = k.dims3()?;
         let scale = ((n_state / self.n_head) as f64).powf(-0.25);
@@ -134,9 +145,10 @@ impl MultiHeadAttention {
                 qk = qk.broadcast_add(&mask)?;
             }
         }
+        let captured = if want_qk { Some(qk.clone()) } else { None };
         let w = candle_nn::ops::softmax_last_dim(&qk)?;
         let wv = w.matmul(&v)?.transpose(1, 2)?.flatten_from(2)?;
-        Ok(wv)
+        Ok((wv, captured))
     }
 
     fn reset_kv_cache(&mut self) {
@@ -179,6 +191,7 @@ impl ResidualAttentionBlock {
         Ok(Self { attn, attn_ln, cross_attn, mlp_linear1, mlp_linear2, mlp_ln })
     }
 
+    /// Returns (output, optional cross-attention QK when `capture_cross_qk`).
     fn forward(
         &mut self,
         x: &Tensor,
@@ -186,22 +199,34 @@ impl ResidualAttentionBlock {
         mask: Option<&Tensor>,
         flush_kv_cache: bool,
         use_self_cache: bool,
-    ) -> Result<Tensor> {
-        let attn = self.attn.forward(
+        capture_cross_qk: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let (attn, _) = self.attn.forward(
             &self.attn_ln.forward(x)?,
             None,
             mask,
             flush_kv_cache,
             use_self_cache,
+            false,
         )?;
         let mut x = (x + attn)?;
+        let mut cross_qk = None;
         if let Some((attn, ln)) = &mut self.cross_attn {
-            x = (&x + attn.forward(&ln.forward(&x)?, xa, None, flush_kv_cache, true)?)?;
+            let (out, qk) = attn.forward(
+                &ln.forward(&x)?,
+                xa,
+                None,
+                flush_kv_cache,
+                true,
+                capture_cross_qk,
+            )?;
+            x = (&x + out)?;
+            cross_qk = qk;
         }
         let mlp = self
             .mlp_linear2
             .forward(&self.mlp_linear1.forward(&self.mlp_ln.forward(&x)?)?.gelu()?)?;
-        x + mlp
+        Ok(((x + mlp)?, cross_qk))
     }
 
     fn reset_kv_cache(&mut self) {
@@ -263,7 +288,7 @@ impl AudioEncoder {
         let mut x = x.broadcast_add(&positional_embedding)?;
         for block in self.blocks.iter_mut() {
             // encoder self-attention is full-sequence; no KV caching
-            x = block.forward(&x, None, None, flush_kv_cache, false)?;
+            x = block.forward(&x, None, None, flush_kv_cache, false, false)?.0;
         }
         let x = self.ln_post.forward(&x)?;
         Ok(x)
@@ -308,9 +333,28 @@ impl TextDecoder {
         let positional_embedding = self.positional_embedding.narrow(0, offset, seq_len)?;
         let mut x = token_embedding.broadcast_add(&positional_embedding)?;
         for block in self.blocks.iter_mut() {
-            x = block.forward(&x, Some(xa), Some(&self.mask), flush_kv_cache, true)?;
+            x = block
+                .forward(&x, Some(xa), Some(&self.mask), flush_kv_cache, true, false)?
+                .0;
         }
         self.ln.forward(&x)
+    }
+
+    /// Full-sequence forward that also returns each layer's cross-attention
+    /// QK matrix ((batch, heads, seq, n_audio_ctx) per layer) — the explicit
+    /// replacement for `timing.py`'s forward hooks. Flushes the KV cache.
+    pub fn forward_with_cross_qk(&mut self, x: &Tensor, xa: &Tensor) -> Result<(Tensor, Vec<Tensor>)> {
+        let seq_len = x.dim(D::Minus1)?;
+        let token_embedding = self.token_embedding.forward(x)?;
+        let positional_embedding = self.positional_embedding.narrow(0, 0, seq_len)?;
+        let mut x = token_embedding.broadcast_add(&positional_embedding)?;
+        let mut cross_qks = Vec::with_capacity(self.blocks.len());
+        for block in self.blocks.iter_mut() {
+            let (out, qk) = block.forward(&x, Some(xa), Some(&self.mask), true, true, true)?;
+            x = out;
+            cross_qks.push(qk.expect("decoder blocks have cross-attention"));
+        }
+        Ok((self.ln.forward(&x)?, cross_qks))
     }
 
     fn cache_len(&self) -> usize {

@@ -25,6 +25,12 @@ pub struct TranscribeOptions {
     pub initial_prompt: Option<String>,
     /// start,end pairs in seconds; empty means the whole file.
     pub clip_timestamps: Vec<f64>,
+    /// Extract word-level timestamps via cross-attention DTW alignment.
+    pub word_timestamps: bool,
+    /// Punctuation merged with the following word (word_timestamps only).
+    pub prepend_punctuations: String,
+    /// Punctuation merged with the previous word (word_timestamps only).
+    pub append_punctuations: String,
     pub decode_options: DecodingOptions,
     /// None: silent. Some(false): progress only. Some(true): print segments.
     pub verbose: Option<bool>,
@@ -40,10 +46,21 @@ impl Default for TranscribeOptions {
             condition_on_previous_text: true,
             initial_prompt: None,
             clip_timestamps: Vec::new(),
+            word_timestamps: false,
+            prepend_punctuations: "\"'“¿([{-".to_string(),
+            append_punctuations: "\"'.。,，!！?？:：”)]}、".to_string(),
             decode_options: DecodingOptions::default(),
             verbose: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Word {
+    pub word: String,
+    pub start: f64,
+    pub end: f64,
+    pub probability: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +75,8 @@ pub struct Segment {
     pub avg_logprob: f64,
     pub compression_ratio: f64,
     pub no_speech_prob: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub words: Option<Vec<Word>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -199,6 +218,7 @@ pub fn transcribe(
     let mut clip_idx = 0usize;
     let mut seek = seek_clips[0].0;
     let timestamp_begin = tokenizer.timestamp_begin;
+    let mut last_speech_timestamp = 0.0f64;
 
     while clip_idx < seek_clips.len() {
         let (seek_clip_start, seek_clip_end) = seek_clips[clip_idx];
@@ -270,6 +290,7 @@ pub fn transcribe(
                 avg_logprob: result.avg_logprob,
                 compression_ratio: result.compression_ratio,
                 no_speech_prob: result.no_speech_prob,
+                words: None,
             }
         };
 
@@ -320,6 +341,29 @@ pub fn transcribe(
             seek += segment_size;
         }
 
+        if options.word_timestamps {
+            crate::timing::add_word_timestamps(
+                &mut current_segments,
+                model,
+                &tokenizer,
+                &mel_segment,
+                segment_size,
+                &options.prepend_punctuations,
+                &options.append_punctuations,
+                last_speech_timestamp,
+            )?;
+            if !single_timestamp_ending {
+                if let Some(last_word_end) = get_end(&current_segments) {
+                    if last_word_end > time_offset {
+                        seek = (last_word_end * FRAMES_PER_SECOND as f64).round() as usize;
+                    }
+                }
+            }
+            if let Some(last_word_end) = get_end(&current_segments) {
+                last_speech_timestamp = last_word_end;
+            }
+        }
+
         if options.verbose == Some(true) {
             for s in &current_segments {
                 println!(
@@ -336,6 +380,9 @@ pub fn transcribe(
             if s.start == s.end || s.text.trim().is_empty() {
                 s.text = String::new();
                 s.tokens = Vec::new();
+                if s.words.is_some() {
+                    s.words = Some(Vec::new());
+                }
             }
         }
 
@@ -366,6 +413,17 @@ pub fn transcribe(
         segments: all_segments,
         language,
     })
+}
+
+/// Last word-end time across segments (utils.py::get_end).
+fn get_end(segments: &[Segment]) -> Option<f64> {
+    segments
+        .iter()
+        .rev()
+        .filter_map(|s| s.words.as_ref())
+        .flat_map(|w| w.iter().rev())
+        .map(|w| w.end)
+        .next()
 }
 
 /// Guard used by the CLI: English-only models reject other languages.

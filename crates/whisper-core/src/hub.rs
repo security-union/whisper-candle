@@ -73,6 +73,9 @@ impl FromStr for WhichModel {
 pub struct ModelFiles {
     pub config: PathBuf,
     pub weights: PathBuf,
+    /// generation_config.json (carries `alignment_heads` for word timestamps);
+    /// not present in every repo.
+    pub generation_config: Option<PathBuf>,
 }
 
 /// Download (or reuse from the HF cache) config.json and model.safetensors.
@@ -81,5 +84,6 @@ pub fn fetch_model(which: WhichModel) -> Result<ModelFiles> {
     let repo = api.model(which.hf_repo().to_string());
     let config = repo.get("config.json")?;
     let weights = repo.get("model.safetensors")?;
-    Ok(ModelFiles { config, weights })
+    let generation_config = repo.get("generation_config.json").ok();
+    Ok(ModelFiles { config, weights, generation_config })
 }

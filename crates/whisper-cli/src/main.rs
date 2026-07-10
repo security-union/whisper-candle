@@ -73,6 +73,10 @@ struct Args {
     #[arg(long)]
     clip_timestamps: Option<String>,
 
+    /// Extract word-level timestamps (included in json output)
+    #[arg(long, default_value_t = false)]
+    word_timestamps: bool,
+
     /// Print progress and decoded text
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     verbose: bool,
@@ -132,6 +136,7 @@ fn main() -> Result<()> {
         condition_on_previous_text: args.condition_on_previous_text,
         initial_prompt: args.initial_prompt.clone(),
         clip_timestamps,
+        word_timestamps: args.word_timestamps,
         decode_options: DecodingOptions {
             task,
             language,
@@ -139,6 +144,7 @@ fn main() -> Result<()> {
             ..Default::default()
         },
         verbose: Some(args.verbose),
+        ..Default::default()
     };
 
     let formats: Vec<OutputFormat> = if args.output_format == "all" {

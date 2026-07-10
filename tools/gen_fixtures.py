@@ -132,7 +132,9 @@ def gen_dtw_and_medfilt_goldens(out: Path):
         x = rng.standard_normal((n, m)).astype(np.float64)
         path = dtw_cpu(x)  # (2, path_len)
         arrays[f"dtw_in_{i}"] = x
-        arrays[f"dtw_out_{i}"] = path.astype(np.int64)
+        # ascontiguousarray: dtw_cpu returns a transposed view, and
+        # fortran-order npz entries aren't readable from candle
+        arrays[f"dtw_out_{i}"] = np.ascontiguousarray(path.astype(np.int64))
 
     torch.manual_seed(42)
     for i, (shape, width) in enumerate([((129,), 7), ((4, 10, 64), 9), ((1, 5, 30), 7)]):

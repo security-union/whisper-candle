@@ -8,6 +8,7 @@ pub mod decode;
 pub mod hub;
 pub mod model;
 pub mod nn;
+pub mod timing;
 pub mod tokenizer;
 pub mod transcribe;
 pub mod utils;
@@ -40,5 +41,9 @@ pub fn device(name: &str) -> Result<Device> {
 pub fn load_model(name: &str, device: &Device) -> Result<WhisperModel> {
     let which: WhichModel = name.parse()?;
     let files = fetch_model(which)?;
-    WhisperModel::load(&files.config, &files.weights, device)
+    let mut model = WhisperModel::load(&files.config, &files.weights, device)?;
+    if let Some(gc) = &files.generation_config {
+        model.set_alignment_heads_from_file(gc)?;
+    }
+    Ok(model)
 }

@@ -12,6 +12,10 @@ pub struct WhisperModel {
     inner: nn::Whisper,
     pub config: Config,
     pub device: Device,
+    /// (layer, head) pairs of cross-attention heads correlated with word
+    /// timing. From generation_config.json when available; defaults to all
+    /// heads in the upper half of decoder layers (model.py::Whisper.__init__).
+    pub alignment_heads: Option<Vec<(usize, usize)>>,
 }
 
 impl WhisperModel {
@@ -23,7 +27,50 @@ impl WhisperModel {
             VarBuilder::from_mmaped_safetensors(&[weights_path.as_ref()], DType::F32, device)?
         };
         let inner = nn::Whisper::load(&vb, config.clone())?;
-        Ok(Self { inner, config, device: device.clone() })
+        Ok(Self { inner, config, device: device.clone(), alignment_heads: None })
+    }
+
+    /// Read `alignment_heads` from a generation_config.json if it has them.
+    pub fn set_alignment_heads_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+        if let Some(heads) = v.get("alignment_heads").and_then(|h| h.as_array()) {
+            let pairs: Vec<(usize, usize)> = heads
+                .iter()
+                .filter_map(|p| {
+                    let p = p.as_array()?;
+                    Some((p.first()?.as_u64()? as usize, p.get(1)?.as_u64()? as usize))
+                })
+                .collect();
+            if !pairs.is_empty() {
+                self.alignment_heads = Some(pairs);
+            }
+        }
+        Ok(())
+    }
+
+    /// Alignment heads, falling back to the reference default: every head in
+    /// the upper half of the decoder layers.
+    pub fn alignment_heads(&self) -> Vec<(usize, usize)> {
+        match &self.alignment_heads {
+            Some(h) => h.clone(),
+            None => {
+                let layers = self.config.decoder_layers;
+                let heads = self.config.decoder_attention_heads;
+                (layers / 2..layers)
+                    .flat_map(|l| (0..heads).map(move |h| (l, h)))
+                    .collect()
+            }
+        }
+    }
+
+    /// Full-sequence decoder forward that also returns per-layer
+    /// cross-attention QK matrices; used for word-timestamp alignment.
+    pub fn decoder_forward_with_cross_qk(
+        &mut self,
+        tokens: &Tensor,
+        audio_features: &Tensor,
+    ) -> Result<(Tensor, Vec<Tensor>)> {
+        Ok(self.inner.decoder.forward_with_cross_qk(tokens, audio_features)?)
     }
 
     pub fn is_multilingual(&self) -> bool {
