@@ -4,7 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "CLI for whisper-candle-core"
+description = "Native Whisper transcription CLI on candle — no Python, no PyTorch, no C/C++ bindings"
+readme = "../../README.md"
+keywords = ["whisper", "speech-to-text", "asr", "candle", "transcription"]
+categories = ["multimedia::audio", "command-line-utilities"]
 
 [[bin]]
 name = "whisper-candle"

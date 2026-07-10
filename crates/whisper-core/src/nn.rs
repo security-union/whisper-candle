@@ -7,7 +7,9 @@
 //! Cross-attention QK capture for word timestamps lands in Phase 4.
 
 use candle_core::{Device, IndexOp, Result, Tensor, D};
-use candle_nn::{embedding, Conv1d, Conv1dConfig, Embedding, LayerNorm, Linear, Module, VarBuilder};
+use candle_nn::{
+    embedding, Conv1d, Conv1dConfig, Embedding, LayerNorm, Linear, Module, VarBuilder,
+};
 use candle_transformers::models::whisper::Config;
 
 /// Quantized counterparts: QMatMul-backed linears from a GGUF file; layer
@@ -46,13 +48,17 @@ fn q_conv1d(
 /// Dequantize a GGUF linear into a plain f32 Linear (used for the encoder,
 /// where BLAS GEMMs beat qmatmul kernels by an order of magnitude).
 fn qlinear_dequantized(in_dim: usize, out_dim: usize, vb: QVarBuilder) -> Result<Linear> {
-    let weight = vb.get((out_dim, in_dim), "weight")?.dequantize(vb.device())?;
+    let weight = vb
+        .get((out_dim, in_dim), "weight")?
+        .dequantize(vb.device())?;
     let bias = vb.get(out_dim, "bias")?.dequantize(vb.device())?;
     Ok(Linear::new(weight, Some(bias)))
 }
 
 fn qlinear_no_bias_dequantized(in_dim: usize, out_dim: usize, vb: QVarBuilder) -> Result<Linear> {
-    let weight = vb.get((out_dim, in_dim), "weight")?.dequantize(vb.device())?;
+    let weight = vb
+        .get((out_dim, in_dim), "weight")?
+        .dequantize(vb.device())?;
     Ok(Linear::new(weight, None))
 }
 
@@ -101,7 +107,14 @@ impl MultiHeadAttention<Linear> {
         let value = linear(n_state, n_state, vb.pp("v_proj"))?;
         let key = linear_no_bias(n_state, n_state, vb.pp("k_proj"))?;
         let out = linear(n_state, n_state, vb.pp("out_proj"))?;
-        Ok(Self { query, key, value, out, n_head, kv_cache: None })
+        Ok(Self {
+            query,
+            key,
+            value,
+            out,
+            n_head,
+            kv_cache: None,
+        })
     }
 }
 
@@ -111,7 +124,14 @@ impl MultiHeadAttention<QLinear> {
         let value = qlinear(n_state, n_state, vb.pp("v_proj"))?;
         let key = qlinear_no_bias(n_state, n_state, vb.pp("k_proj"))?;
         let out = qlinear(n_state, n_state, vb.pp("out_proj"))?;
-        Ok(Self { query, key, value, out, n_head, kv_cache: None })
+        Ok(Self {
+            query,
+            key,
+            value,
+            out,
+            n_head,
+            kv_cache: None,
+        })
     }
 }
 
@@ -121,12 +141,18 @@ impl MultiHeadAttention<Linear> {
         let value = qlinear_dequantized(n_state, n_state, vb.pp("v_proj"))?;
         let key = qlinear_no_bias_dequantized(n_state, n_state, vb.pp("k_proj"))?;
         let out = qlinear_dequantized(n_state, n_state, vb.pp("out_proj"))?;
-        Ok(Self { query, key, value, out, n_head, kv_cache: None })
+        Ok(Self {
+            query,
+            key,
+            value,
+            out,
+            n_head,
+            kv_cache: None,
+        })
     }
 }
 
 impl<L: Module> MultiHeadAttention<L> {
-
     /// Self-attention (xa = None): with `use_cache`, new keys/values are
     /// appended to the cache and only the suffix is treated as queries.
     /// Cross-attention (xa = Some): keys/values computed once per flush.
@@ -269,12 +295,24 @@ impl ResidualAttentionBlock<Linear> {
         let mlp_linear1 = linear(n_state, n_mlp, vb.pp("fc1"))?;
         let mlp_linear2 = linear(n_mlp, n_state, vb.pp("fc2"))?;
         let mlp_ln = layer_norm(n_state, vb.pp("final_layer_norm"))?;
-        Ok(Self { attn, attn_ln, cross_attn, mlp_linear1, mlp_linear2, mlp_ln })
+        Ok(Self {
+            attn,
+            attn_ln,
+            cross_attn,
+            mlp_linear1,
+            mlp_linear2,
+            mlp_ln,
+        })
     }
 }
 
 impl ResidualAttentionBlock<Linear> {
-    fn load_gguf_dequantized(n_state: usize, n_head: usize, ca: bool, vb: QVarBuilder) -> Result<Self> {
+    fn load_gguf_dequantized(
+        n_state: usize,
+        n_head: usize,
+        ca: bool,
+        vb: QVarBuilder,
+    ) -> Result<Self> {
         let attn = MultiHeadAttention::load_gguf_dequantized(n_state, n_head, vb.pp("self_attn"))?;
         let attn_ln = q_layer_norm(n_state, vb.pp("self_attn_layer_norm"))?;
         let cross_attn = if ca {
@@ -289,7 +327,14 @@ impl ResidualAttentionBlock<Linear> {
         let mlp_linear1 = qlinear_dequantized(n_state, n_mlp, vb.pp("fc1"))?;
         let mlp_linear2 = qlinear_dequantized(n_mlp, n_state, vb.pp("fc2"))?;
         let mlp_ln = q_layer_norm(n_state, vb.pp("final_layer_norm"))?;
-        Ok(Self { attn, attn_ln, cross_attn, mlp_linear1, mlp_linear2, mlp_ln })
+        Ok(Self {
+            attn,
+            attn_ln,
+            cross_attn,
+            mlp_linear1,
+            mlp_linear2,
+            mlp_ln,
+        })
     }
 }
 
@@ -308,12 +353,18 @@ impl ResidualAttentionBlock<QLinear> {
         let mlp_linear1 = qlinear(n_state, n_mlp, vb.pp("fc1"))?;
         let mlp_linear2 = qlinear(n_mlp, n_state, vb.pp("fc2"))?;
         let mlp_ln = q_layer_norm(n_state, vb.pp("final_layer_norm"))?;
-        Ok(Self { attn, attn_ln, cross_attn, mlp_linear1, mlp_linear2, mlp_ln })
+        Ok(Self {
+            attn,
+            attn_ln,
+            cross_attn,
+            mlp_linear1,
+            mlp_linear2,
+            mlp_ln,
+        })
     }
 }
 
 impl<L: Module> ResidualAttentionBlock<L> {
-
     /// Returns (output, optional cross-attention QK when `capture_cross_qk`).
     fn forward(
         &mut self,
@@ -346,9 +397,12 @@ impl<L: Module> ResidualAttentionBlock<L> {
             x = (&x + out)?;
             cross_qk = qk;
         }
-        let mlp = self
-            .mlp_linear2
-            .forward(&self.mlp_linear1.forward(&self.mlp_ln.forward(&x)?)?.gelu()?)?;
+        let mlp = self.mlp_linear2.forward(
+            &self
+                .mlp_linear1
+                .forward(&self.mlp_ln.forward(&x)?)?
+                .gelu()?,
+        )?;
         Ok(((x + mlp)?, cross_qk))
     }
 
@@ -390,16 +444,36 @@ impl AudioEncoder<Linear> {
         let n_state = cfg.d_model;
         let n_head = cfg.encoder_attention_heads;
         let n_ctx = cfg.max_source_positions;
-        let cfg1 = Conv1dConfig { padding: 1, stride: 1, groups: 1, dilation: 1, cudnn_fwd_algo: None };
-        let cfg2 = Conv1dConfig { padding: 1, stride: 2, groups: 1, dilation: 1, cudnn_fwd_algo: None };
+        let cfg1 = Conv1dConfig {
+            padding: 1,
+            stride: 1,
+            groups: 1,
+            dilation: 1,
+            cudnn_fwd_algo: None,
+        };
+        let cfg2 = Conv1dConfig {
+            padding: 1,
+            stride: 2,
+            groups: 1,
+            dilation: 1,
+            cudnn_fwd_algo: None,
+        };
         let conv1 = conv1d(cfg.num_mel_bins, n_state, 3, cfg1, vb.pp("conv1"))?;
         let conv2 = conv1d(n_state, n_state, 3, cfg2, vb.pp("conv2"))?;
         let positional_embedding = sinusoids(n_ctx, n_state, vb.device())?;
         let blocks = (0..cfg.encoder_layers)
-            .map(|i| ResidualAttentionBlock::load(n_state, n_head, false, vb.pp(format!("layers.{i}"))))
+            .map(|i| {
+                ResidualAttentionBlock::load(n_state, n_head, false, vb.pp(format!("layers.{i}")))
+            })
             .collect::<Result<Vec<_>>>()?;
         let ln_post = layer_norm(n_state, vb.pp("layer_norm"))?;
-        Ok(Self { conv1, conv2, positional_embedding, blocks, ln_post })
+        Ok(Self {
+            conv1,
+            conv2,
+            positional_embedding,
+            blocks,
+            ln_post,
+        })
     }
 }
 
@@ -408,8 +482,20 @@ impl AudioEncoder<Linear> {
         let n_state = cfg.d_model;
         let n_head = cfg.encoder_attention_heads;
         let n_ctx = cfg.max_source_positions;
-        let cfg1 = Conv1dConfig { padding: 1, stride: 1, groups: 1, dilation: 1, cudnn_fwd_algo: None };
-        let cfg2 = Conv1dConfig { padding: 1, stride: 2, groups: 1, dilation: 1, cudnn_fwd_algo: None };
+        let cfg1 = Conv1dConfig {
+            padding: 1,
+            stride: 1,
+            groups: 1,
+            dilation: 1,
+            cudnn_fwd_algo: None,
+        };
+        let cfg2 = Conv1dConfig {
+            padding: 1,
+            stride: 2,
+            groups: 1,
+            dilation: 1,
+            cudnn_fwd_algo: None,
+        };
         let conv1 = q_conv1d(cfg.num_mel_bins, n_state, 3, cfg1, vb.pp("conv1"))?;
         let conv2 = q_conv1d(n_state, n_state, 3, cfg2, vb.pp("conv2"))?;
         let positional_embedding = sinusoids(n_ctx, n_state, vb.device())?;
@@ -424,7 +510,13 @@ impl AudioEncoder<Linear> {
             })
             .collect::<Result<Vec<_>>>()?;
         let ln_post = q_layer_norm(n_state, vb.pp("layer_norm"))?;
-        Ok(Self { conv1, conv2, positional_embedding, blocks, ln_post })
+        Ok(Self {
+            conv1,
+            conv2,
+            positional_embedding,
+            blocks,
+            ln_post,
+        })
     }
 }
 
@@ -438,7 +530,9 @@ impl<L: Module> AudioEncoder<L> {
         let mut x = x.broadcast_add(&positional_embedding)?;
         for block in self.blocks.iter_mut() {
             // encoder self-attention is full-sequence; no KV caching
-            x = block.forward(&x, None, None, flush_kv_cache, false, false)?.0;
+            x = block
+                .forward(&x, None, None, flush_kv_cache, false, false)?
+                .0;
         }
         let x = self.ln_post.forward(&x)?;
         Ok(x)
@@ -462,14 +556,22 @@ impl TextDecoder<Linear> {
         let token_embedding = embedding(cfg.vocab_size, n_state, vb.pp("embed_tokens"))?;
         let positional_embedding = vb.get((n_ctx, n_state), "embed_positions.weight")?;
         let blocks = (0..cfg.decoder_layers)
-            .map(|i| ResidualAttentionBlock::load(n_state, n_head, true, vb.pp(format!("layers.{i}"))))
+            .map(|i| {
+                ResidualAttentionBlock::load(n_state, n_head, true, vb.pp(format!("layers.{i}")))
+            })
             .collect::<Result<Vec<_>>>()?;
         let ln = layer_norm(n_state, vb.pp("layer_norm"))?;
         let mask: Vec<_> = (0..n_ctx)
             .flat_map(|i| (0..n_ctx).map(move |j| if j > i { f32::NEG_INFINITY } else { 0f32 }))
             .collect();
         let mask = Tensor::from_vec(mask, (n_ctx, n_ctx), vb.device())?;
-        Ok(Self { token_embedding, positional_embedding, blocks, ln, mask })
+        Ok(Self {
+            token_embedding,
+            positional_embedding,
+            blocks,
+            ln,
+            mask,
+        })
     }
 }
 
@@ -486,14 +588,27 @@ impl TextDecoder<QLinear> {
             .get((n_ctx, n_state), "embed_positions.weight")?
             .dequantize(vb.device())?;
         let blocks = (0..cfg.decoder_layers)
-            .map(|i| ResidualAttentionBlock::load_gguf(n_state, n_head, true, vb.pp(format!("layers.{i}"))))
+            .map(|i| {
+                ResidualAttentionBlock::load_gguf(
+                    n_state,
+                    n_head,
+                    true,
+                    vb.pp(format!("layers.{i}")),
+                )
+            })
             .collect::<Result<Vec<_>>>()?;
         let ln = q_layer_norm(n_state, vb.pp("layer_norm"))?;
         let mask: Vec<_> = (0..n_ctx)
             .flat_map(|i| (0..n_ctx).map(move |j| if j > i { f32::NEG_INFINITY } else { 0f32 }))
             .collect();
         let mask = Tensor::from_vec(mask, (n_ctx, n_ctx), vb.device())?;
-        Ok(Self { token_embedding, positional_embedding, blocks, ln, mask })
+        Ok(Self {
+            token_embedding,
+            positional_embedding,
+            blocks,
+            ln,
+            mask,
+        })
     }
 }
 
@@ -519,7 +634,11 @@ impl<L: Module> TextDecoder<L> {
     /// Full-sequence forward that also returns each layer's cross-attention
     /// QK matrix ((batch, heads, seq, n_audio_ctx) per layer) — the explicit
     /// replacement for `timing.py`'s forward hooks. Flushes the KV cache.
-    pub fn forward_with_cross_qk(&mut self, x: &Tensor, xa: &Tensor) -> Result<(Tensor, Vec<Tensor>)> {
+    pub fn forward_with_cross_qk(
+        &mut self,
+        x: &Tensor,
+        xa: &Tensor,
+    ) -> Result<(Tensor, Vec<Tensor>)> {
         let seq_len = x.dim(D::Minus1)?;
         let token_embedding = self.token_embedding.forward(x)?;
         let positional_embedding = self.positional_embedding.narrow(0, 0, seq_len)?;
@@ -583,7 +702,11 @@ impl Whisper<Linear, Linear> {
     pub fn load(vb: &VarBuilder, config: Config) -> Result<Self> {
         let encoder = AudioEncoder::load(vb.pp("model.encoder"), &config)?;
         let decoder = TextDecoder::load(vb.pp("model.decoder"), &config)?;
-        Ok(Self { encoder, decoder, config })
+        Ok(Self {
+            encoder,
+            decoder,
+            config,
+        })
     }
 }
 
@@ -595,7 +718,11 @@ impl Whisper<Linear, QLinear> {
     pub fn load_gguf(vb: &QVarBuilder, config: Config) -> Result<Self> {
         let encoder = AudioEncoder::load_gguf_dequantized(vb.pp("model.encoder"), &config)?;
         let decoder = TextDecoder::load_gguf(vb.pp("model.decoder"), &config)?;
-        Ok(Self { encoder, decoder, config })
+        Ok(Self {
+            encoder,
+            decoder,
+            config,
+        })
     }
 }
 

@@ -27,6 +27,10 @@ fn format_timestamp_matches_python() {
     for case in g["format_timestamp"].as_array().unwrap() {
         let seconds = case["seconds"].as_f64().unwrap();
         let expected = case["formatted"].as_str().unwrap();
-        assert_eq!(format_timestamp(seconds, false, "."), expected, "format({seconds})");
+        assert_eq!(
+            format_timestamp(seconds, false, "."),
+            expected,
+            "format({seconds})"
+        );
     }
 }

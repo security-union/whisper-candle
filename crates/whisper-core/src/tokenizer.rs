@@ -10,44 +10,127 @@ const MULTILINGUAL_TIKTOKEN: &str = include_str!("../assets/multilingual.tiktoke
 const GPT2_TIKTOKEN: &str = include_str!("../assets/gpt2.tiktoken");
 
 /// BPE split pattern used by all Whisper vocabularies (same as GPT-2).
-const PAT_STR: &str =
-    r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
+const PAT_STR: &str = r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
 
 /// Language codes in vocabulary order. The first `num_languages` entries are
 /// assigned token ids `sot + 1 + index`.
 pub const LANGUAGES: &[(&str, &str)] = &[
-    ("en", "english"), ("zh", "chinese"), ("de", "german"), ("es", "spanish"),
-    ("ru", "russian"), ("ko", "korean"), ("fr", "french"), ("ja", "japanese"),
-    ("pt", "portuguese"), ("tr", "turkish"), ("pl", "polish"), ("ca", "catalan"),
-    ("nl", "dutch"), ("ar", "arabic"), ("sv", "swedish"), ("it", "italian"),
-    ("id", "indonesian"), ("hi", "hindi"), ("fi", "finnish"), ("vi", "vietnamese"),
-    ("he", "hebrew"), ("uk", "ukrainian"), ("el", "greek"), ("ms", "malay"),
-    ("cs", "czech"), ("ro", "romanian"), ("da", "danish"), ("hu", "hungarian"),
-    ("ta", "tamil"), ("no", "norwegian"), ("th", "thai"), ("ur", "urdu"),
-    ("hr", "croatian"), ("bg", "bulgarian"), ("lt", "lithuanian"), ("la", "latin"),
-    ("mi", "maori"), ("ml", "malayalam"), ("cy", "welsh"), ("sk", "slovak"),
-    ("te", "telugu"), ("fa", "persian"), ("lv", "latvian"), ("bn", "bengali"),
-    ("sr", "serbian"), ("az", "azerbaijani"), ("sl", "slovenian"), ("kn", "kannada"),
-    ("et", "estonian"), ("mk", "macedonian"), ("br", "breton"), ("eu", "basque"),
-    ("is", "icelandic"), ("hy", "armenian"), ("ne", "nepali"), ("mn", "mongolian"),
-    ("bs", "bosnian"), ("kk", "kazakh"), ("sq", "albanian"), ("sw", "swahili"),
-    ("gl", "galician"), ("mr", "marathi"), ("pa", "punjabi"), ("si", "sinhala"),
-    ("km", "khmer"), ("sn", "shona"), ("yo", "yoruba"), ("so", "somali"),
-    ("af", "afrikaans"), ("oc", "occitan"), ("ka", "georgian"), ("be", "belarusian"),
-    ("tg", "tajik"), ("sd", "sindhi"), ("gu", "gujarati"), ("am", "amharic"),
-    ("yi", "yiddish"), ("lo", "lao"), ("uz", "uzbek"), ("fo", "faroese"),
-    ("ht", "haitian creole"), ("ps", "pashto"), ("tk", "turkmen"), ("nn", "nynorsk"),
-    ("mt", "maltese"), ("sa", "sanskrit"), ("lb", "luxembourgish"), ("my", "myanmar"),
-    ("bo", "tibetan"), ("tl", "tagalog"), ("mg", "malagasy"), ("as", "assamese"),
-    ("tt", "tatar"), ("haw", "hawaiian"), ("ln", "lingala"), ("ha", "hausa"),
-    ("ba", "bashkir"), ("jw", "javanese"), ("su", "sundanese"), ("yue", "cantonese"),
+    ("en", "english"),
+    ("zh", "chinese"),
+    ("de", "german"),
+    ("es", "spanish"),
+    ("ru", "russian"),
+    ("ko", "korean"),
+    ("fr", "french"),
+    ("ja", "japanese"),
+    ("pt", "portuguese"),
+    ("tr", "turkish"),
+    ("pl", "polish"),
+    ("ca", "catalan"),
+    ("nl", "dutch"),
+    ("ar", "arabic"),
+    ("sv", "swedish"),
+    ("it", "italian"),
+    ("id", "indonesian"),
+    ("hi", "hindi"),
+    ("fi", "finnish"),
+    ("vi", "vietnamese"),
+    ("he", "hebrew"),
+    ("uk", "ukrainian"),
+    ("el", "greek"),
+    ("ms", "malay"),
+    ("cs", "czech"),
+    ("ro", "romanian"),
+    ("da", "danish"),
+    ("hu", "hungarian"),
+    ("ta", "tamil"),
+    ("no", "norwegian"),
+    ("th", "thai"),
+    ("ur", "urdu"),
+    ("hr", "croatian"),
+    ("bg", "bulgarian"),
+    ("lt", "lithuanian"),
+    ("la", "latin"),
+    ("mi", "maori"),
+    ("ml", "malayalam"),
+    ("cy", "welsh"),
+    ("sk", "slovak"),
+    ("te", "telugu"),
+    ("fa", "persian"),
+    ("lv", "latvian"),
+    ("bn", "bengali"),
+    ("sr", "serbian"),
+    ("az", "azerbaijani"),
+    ("sl", "slovenian"),
+    ("kn", "kannada"),
+    ("et", "estonian"),
+    ("mk", "macedonian"),
+    ("br", "breton"),
+    ("eu", "basque"),
+    ("is", "icelandic"),
+    ("hy", "armenian"),
+    ("ne", "nepali"),
+    ("mn", "mongolian"),
+    ("bs", "bosnian"),
+    ("kk", "kazakh"),
+    ("sq", "albanian"),
+    ("sw", "swahili"),
+    ("gl", "galician"),
+    ("mr", "marathi"),
+    ("pa", "punjabi"),
+    ("si", "sinhala"),
+    ("km", "khmer"),
+    ("sn", "shona"),
+    ("yo", "yoruba"),
+    ("so", "somali"),
+    ("af", "afrikaans"),
+    ("oc", "occitan"),
+    ("ka", "georgian"),
+    ("be", "belarusian"),
+    ("tg", "tajik"),
+    ("sd", "sindhi"),
+    ("gu", "gujarati"),
+    ("am", "amharic"),
+    ("yi", "yiddish"),
+    ("lo", "lao"),
+    ("uz", "uzbek"),
+    ("fo", "faroese"),
+    ("ht", "haitian creole"),
+    ("ps", "pashto"),
+    ("tk", "turkmen"),
+    ("nn", "nynorsk"),
+    ("mt", "maltese"),
+    ("sa", "sanskrit"),
+    ("lb", "luxembourgish"),
+    ("my", "myanmar"),
+    ("bo", "tibetan"),
+    ("tl", "tagalog"),
+    ("mg", "malagasy"),
+    ("as", "assamese"),
+    ("tt", "tatar"),
+    ("haw", "hawaiian"),
+    ("ln", "lingala"),
+    ("ha", "hausa"),
+    ("ba", "bashkir"),
+    ("jw", "javanese"),
+    ("su", "sundanese"),
+    ("yue", "cantonese"),
 ];
 
 /// Aliases accepted for `--language` in addition to names in [`LANGUAGES`].
 pub const LANGUAGE_ALIASES: &[(&str, &str)] = &[
-    ("burmese", "my"), ("valencian", "ca"), ("flemish", "nl"), ("haitian", "ht"),
-    ("letzeburgesch", "lb"), ("pushto", "ps"), ("panjabi", "pa"), ("moldavian", "ro"),
-    ("moldovan", "ro"), ("sinhalese", "si"), ("castilian", "es"), ("mandarin", "zh"),
+    ("burmese", "my"),
+    ("valencian", "ca"),
+    ("flemish", "nl"),
+    ("haitian", "ht"),
+    ("letzeburgesch", "lb"),
+    ("pushto", "ps"),
+    ("panjabi", "pa"),
+    ("moldavian", "ro"),
+    ("moldovan", "ro"),
+    ("sinhalese", "si"),
+    ("castilian", "es"),
+    ("mandarin", "zh"),
 ];
 
 /// Normalize a user-supplied language (code or name) to a code in [`LANGUAGES`].
@@ -103,7 +186,11 @@ impl Tokenizer {
     ) -> Result<Self> {
         let (vocab_src, language, task) = if multilingual {
             let lang = normalize_language(language.unwrap_or("en"))?;
-            (MULTILINGUAL_TIKTOKEN, Some(lang), Some(task.unwrap_or(Task::Transcribe)))
+            (
+                MULTILINGUAL_TIKTOKEN,
+                Some(lang),
+                Some(task.unwrap_or(Task::Transcribe)),
+            )
         } else {
             (GPT2_TIKTOKEN, None, None)
         };
@@ -122,14 +209,19 @@ impl Tokenizer {
         let n_vocab_base = encoder.len() as u32;
 
         // Special tokens, in the exact order of tokenizer.py::get_encoding
-        let mut specials: Vec<String> = vec![
-            "<|endoftext|>".into(),
-            "<|startoftranscript|>".into(),
-        ];
+        let mut specials: Vec<String> =
+            vec!["<|endoftext|>".into(), "<|startoftranscript|>".into()];
         for (code, _) in LANGUAGES.iter().take(num_languages) {
             specials.push(format!("<|{code}|>"));
         }
-        for s in ["<|translate|>", "<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nospeech|>", "<|notimestamps|>"] {
+        for s in [
+            "<|translate|>",
+            "<|transcribe|>",
+            "<|startoflm|>",
+            "<|startofprev|>",
+            "<|nospeech|>",
+            "<|notimestamps|>",
+        ] {
             specials.push(s.into());
         }
         for i in 0..1501 {
@@ -241,11 +333,17 @@ impl Tokenizer {
     }
 
     pub fn all_language_tokens(&self) -> Vec<u32> {
-        (0..self.num_languages as u32).map(|i| self.sot + 1 + i).collect()
+        (0..self.num_languages as u32)
+            .map(|i| self.sot + 1 + i)
+            .collect()
     }
 
     pub fn all_language_codes(&self) -> Vec<&'static str> {
-        LANGUAGES.iter().take(self.num_languages).map(|(c, _)| *c).collect()
+        LANGUAGES
+            .iter()
+            .take(self.num_languages)
+            .map(|(c, _)| *c)
+            .collect()
     }
 
     pub fn sot_sequence_including_notimestamps(&self) -> Vec<u32> {

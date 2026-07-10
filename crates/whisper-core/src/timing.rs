@@ -12,7 +12,10 @@ use candle_core::{IndexOp, Tensor};
 /// Port of `timing.py::median_filter` (returns input unchanged when the axis
 /// is too short, like the Python guard).
 pub fn median_filter_rows(data: &mut [f32], n_cols: usize, filter_width: usize) {
-    assert!(filter_width % 2 == 1 && filter_width > 0, "filter_width must be odd");
+    assert!(
+        filter_width % 2 == 1 && filter_width > 0,
+        "filter_width must be odd"
+    );
     let pad = filter_width / 2;
     if n_cols <= pad {
         return;
@@ -146,7 +149,10 @@ pub fn find_alignment(
         let mut w: Vec<f32> = qk.flatten_all()?.to_vec1()?;
         // scaled softmax over frames
         for row in w.chunks_exact_mut(half) {
-            let max = row.iter().map(|v| v * qk_scale).fold(f32::NEG_INFINITY, f32::max);
+            let max = row
+                .iter()
+                .map(|v| v * qk_scale)
+                .fold(f32::NEG_INFINITY, f32::max);
             let mut sum = 0f32;
             for v in row.iter_mut() {
                 *v = (*v * qk_scale - max).exp();
@@ -310,7 +316,13 @@ pub fn add_word_timestamps(
 
     let text_tokens_per_segment: Vec<Vec<u32>> = segments
         .iter()
-        .map(|s| s.tokens.iter().copied().filter(|&t| t < tokenizer.eot).collect())
+        .map(|s| {
+            s.tokens
+                .iter()
+                .copied()
+                .filter(|&t| t < tokenizer.eot)
+                .collect()
+        })
         .collect();
     let text_tokens: Vec<u32> = text_tokens_per_segment.iter().flatten().copied().collect();
 

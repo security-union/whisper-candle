@@ -70,7 +70,10 @@ pub fn load_model_quantized(
     if !gguf.exists() {
         eprintln!("quantizing {name} to {} (one-time)...", quantization.name());
         let (q, kept) = quantize::quantize_to_gguf(&files.weights, &gguf, quantization)?;
-        eprintln!("wrote {} ({q} tensors quantized, {kept} kept f32)", gguf.display());
+        eprintln!(
+            "wrote {} ({q} tensors quantized, {kept} kept f32)",
+            gguf.display()
+        );
     }
 
     let mut model = WhisperModel::load_quantized(&files.config, &gguf, device)?;

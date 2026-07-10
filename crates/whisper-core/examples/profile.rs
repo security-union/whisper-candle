@@ -8,7 +8,10 @@ use whisper_core::DecodingOptions;
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let audio_path = args.get(1).map(String::as_str).unwrap_or("tests/fixtures/jfk_60s.wav");
+    let audio_path = args
+        .get(1)
+        .map(String::as_str)
+        .unwrap_or("tests/fixtures/jfk_60s.wav");
     let model_name = args.get(2).map(String::as_str).unwrap_or("tiny");
     let quantization = args.get(3).map(String::as_str);
 
@@ -17,7 +20,12 @@ fn main() -> anyhow::Result<()> {
         Some(q) => whisper_core::load_model_quantized(model_name, q.parse()?, &device)?,
         None => whisper_core::load_model(model_name, &device)?,
     };
-    let tokenizer = get_tokenizer(model.is_multilingual(), model.num_languages(), Some("en"), Some(Task::Transcribe))?;
+    let tokenizer = get_tokenizer(
+        model.is_multilingual(),
+        model.num_languages(),
+        Some("en"),
+        Some(Task::Transcribe),
+    )?;
 
     let t0 = Instant::now();
     let pcm = load_audio(audio_path)?;
@@ -39,10 +47,18 @@ fn main() -> anyhow::Result<()> {
 
     // decode one window
     let t0 = Instant::now();
-    let opts = DecodingOptions { language: Some("en".into()), ..Default::default() };
+    let opts = DecodingOptions {
+        language: Some("en".into()),
+        ..Default::default()
+    };
     let result = whisper_core::decode(&mut model, &tokenizer, &mel_t, opts)?;
     let n_tokens = result.tokens.len();
-    println!("decode:     {:?} ({} tokens, {:.1} ms/token)", t0.elapsed(), n_tokens, t0.elapsed().as_secs_f64() * 1000.0 / (n_tokens + 4) as f64);
+    println!(
+        "decode:     {:?} ({} tokens, {:.1} ms/token)",
+        t0.elapsed(),
+        n_tokens,
+        t0.elapsed().as_secs_f64() * 1000.0 / (n_tokens + 4) as f64
+    );
 
     // decoder steps alone: run 50 single-token steps against cached features
     let sot = tokenizer.sot_sequence.clone();
@@ -54,7 +70,10 @@ fn main() -> anyhow::Result<()> {
         let h = model.decoder_forward(&one, &features, false)?;
         let _ = model.logits_at(&h, 0)?;
     }
-    println!("decoder step: {:.2} ms (incl. final_linear)", t0.elapsed().as_secs_f64() * 1000.0 / 50.0);
+    println!(
+        "decoder step: {:.2} ms (incl. final_linear)",
+        t0.elapsed().as_secs_f64() * 1000.0 / 50.0
+    );
 
     // final_linear alone
     let h = model.decoder_forward(&one, &features, false)?;
@@ -62,7 +81,10 @@ fn main() -> anyhow::Result<()> {
     for _ in 0..50 {
         let _ = model.logits_at(&h, 0)?;
     }
-    println!("final_linear: {:.2} ms", t0.elapsed().as_secs_f64() * 1000.0 / 50.0);
+    println!(
+        "final_linear: {:.2} ms",
+        t0.elapsed().as_secs_f64() * 1000.0 / 50.0
+    );
 
     Ok(())
 }

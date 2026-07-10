@@ -86,8 +86,8 @@ pub fn quantize_to_gguf(
 ) -> Result<(usize, usize)> {
     let dtype = quantization.ggml_dtype();
     let block = dtype.block_size();
-    let tensors = candle_core::safetensors::load(weights, &Device::Cpu)
-        .context("loading safetensors")?;
+    let tensors =
+        candle_core::safetensors::load(weights, &Device::Cpu).context("loading safetensors")?;
 
     let mut qtensors: Vec<(String, QTensor)> = Vec::with_capacity(tensors.len());
     let (mut quantized, mut kept) = (0usize, 0usize);
@@ -116,10 +116,9 @@ pub fn quantize_to_gguf(
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut file = std::fs::File::create(out)
-        .with_context(|| format!("creating {}", out.display()))?;
-    let refs: Vec<(&str, &QTensor)> =
-        qtensors.iter().map(|(n, t)| (n.as_str(), t)).collect();
+    let mut file =
+        std::fs::File::create(out).with_context(|| format!("creating {}", out.display()))?;
+    let refs: Vec<(&str, &QTensor)> = qtensors.iter().map(|(n, t)| (n.as_str(), t)).collect();
     gguf_file::write(&mut file, &[], &refs)?;
     Ok((quantized, kept))
 }

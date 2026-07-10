@@ -129,7 +129,12 @@ pub fn transcribe(
             if options.verbose == Some(true) {
                 println!("Detecting language using up to the first 30 seconds.");
             }
-            let tok = get_tokenizer(true, model.num_languages(), Some("en"), Some(Task::Transcribe))?;
+            let tok = get_tokenizer(
+                true,
+                model.num_languages(),
+                Some("en"),
+                Some(Task::Transcribe),
+            )?;
             let window = mel_window(0, N_FRAMES)?;
             let features = model.encoder_forward(&window, true)?;
             let (lang, _) = detect_language(model, &tok, &features)?;
@@ -143,8 +148,16 @@ pub fn transcribe(
     let tokenizer = get_tokenizer(
         model.is_multilingual(),
         model.num_languages(),
-        if model.is_multilingual() { Some(language.as_str()) } else { None },
-        if model.is_multilingual() { Some(task) } else { None },
+        if model.is_multilingual() {
+            Some(language.as_str())
+        } else {
+            None
+        },
+        if model.is_multilingual() {
+            Some(task)
+        } else {
+            None
+        },
     )?;
 
     // seek clips
@@ -159,10 +172,7 @@ pub fn transcribe(
     if seek_points.len() % 2 == 1 {
         seek_points.push(content_frames);
     }
-    let seek_clips: Vec<(usize, usize)> = seek_points
-        .chunks(2)
-        .map(|c| (c[0], c[1]))
-        .collect();
+    let seek_clips: Vec<(usize, usize)> = seek_points.chunks(2).map(|c| (c[0], c[1])).collect();
 
     let input_stride = N_FRAMES / model.n_audio_ctx(); // mel frames per output token: 2
     let time_precision = input_stride as f64 * HOP_LENGTH as f64 / SAMPLE_RATE as f64; // 0.02s
@@ -400,7 +410,8 @@ pub fn transcribe(
                     if is_segment_anomaly(Some(first)) {
                         let gap = first.start - time_offset;
                         if gap > threshold {
-                            seek = previous_seek + (gap * FRAMES_PER_SECOND as f64).round() as usize;
+                            seek =
+                                previous_seek + (gap * FRAMES_PER_SECOND as f64).round() as usize;
                             continue;
                         }
                     }

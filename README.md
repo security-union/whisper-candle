@@ -1,46 +1,43 @@
 # whisper-candle
 
-Pure-Rust port of [OpenAI Whisper](https://github.com/openai/whisper) built on
-[candle](https://github.com/huggingface/candle) — no C/C++ bindings, no
-PyTorch. Developed test-first against golden fixtures generated from the
-Python reference implementation (see [DESIGN.md](DESIGN.md)).
+**Native [OpenAI Whisper](https://github.com/openai/whisper) in pure Rust. No Python, no PyTorch, no C/C++ bindings.**
 
-**Status:** transcription is at parity with PyTorch — greedy *and* beam-search
-decoding are token-exact on the test fixtures; word-level timestamps
-(`--word-timestamps`) match within 0.1s. Includes temperature-fallback, best_of
-sampling, language detection, prompts, and txt/srt/vtt/tsv/json writers.
-Remaining work is performance tuning and quantized models (DESIGN.md §7).
+whisper-candle is a from-scratch port of Whisper's full inference pipeline to
+Rust on [candle](https://github.com/huggingface/candle). One static binary
+replaces the reference stack (Python + PyTorch + ffmpeg + numba + tiktoken):
+audio decoding, log-mel spectrogram, encoder/decoder, greedy & beam-search
+decoding, word-level timestamps, and subtitle writers — all native.
 
-## Usage
+It is not a wrapper: unlike `whisper-rs` (whisper.cpp bindings), there is no C
+or C++ in the dependency tree.
+
+## Why
+
+- **Zero-dependency deploys** — embed speech-to-text in a Rust service or ship
+  a single binary; no Python runtime or conda environment to drag along.
+- **Verified parity, not "inspired by"** — developed test-first against golden
+  fixtures generated from the reference implementation: greedy **and** beam
+  decoding are token-exact vs PyTorch on the test set, word timestamps within
+  0.1 s ([DESIGN.md](DESIGN.md) documents the test pyramid and tolerances).
+- **Runs everywhere candle runs** — CPU (Accelerate/BLAS), Metal (correct
+  where torch MPS is broken), CUDA behind a feature flag.
+
+## Quick start
 
 ```bash
-# CPU (Accelerate BLAS on macOS)
 cargo run --release --features accelerate -p whisper-candle-cli -- \
     audio.mp3 --model base --output-format srt -o out/
-
-# Metal
-cargo build --release --features metal
-target/release/whisper-candle audio.flac --model large-v3 --device metal
 ```
 
-Models download automatically from the Hugging Face Hub (safetensors) into
-`~/.cache/huggingface` on first use. Supported: `tiny`, `base`, `small`,
-`medium`, `large-v1/v2/v3`, `turbo`, and the `.en` variants.
-
-### Quantized models
+Models (`tiny` … `large-v3`, `turbo`, `.en` variants) download automatically
+from the Hugging Face Hub as safetensors. Useful flags:
 
 ```bash
-whisper-candle audio.mp3 --model turbo --quantization q4k
+--device metal              # Apple GPU
+--quantization q4k          # quantize locally to GGUF once (turbo: 0.5 GB vs 1.6 GB)
+--word-timestamps           # per-word timing in the json output
+--task translate --language ja
 ```
-
-Quantizes the HF f32 weights locally on first use (GGUF cached under
-`~/.cache/whisper-candle/`, e.g. turbo q4k ≈ 0.5 GB vs 1.6 GB f32) and runs a
-hybrid model: f32 encoder (BLAS is much faster for the big prefill GEMMs) +
-quantized decoder. Supported dtypes: `q4_0 q4_1 q5_0 q5_1 q8_0 q2k q3k q4k
-q5k q6k`. `q8_0` is near-lossless (matches the f32 transcript on the test
-fixtures). Note: on machines with a fast BLAS, quantization trades some speed
-for a ~3-6x smaller memory/disk footprint — it's a capacity feature, not a
-speed feature.
 
 As a library:
 
@@ -51,28 +48,29 @@ let result = whisper_core::transcribe_file(&mut model, "audio.wav", &Default::de
 println!("{}", result.text);
 ```
 
-## Testing
+## Status
 
-Golden fixtures are generated from the Python reference into `tests/fixtures/`
-(committed). Fast suite (no network):
+Transcription is at parity with the Python reference (see DESIGN.md for the
+current phase); remaining work is performance tuning — CPU decoding currently
+runs ~10–30× real-time on Apple Silicon, within ~4× of PyTorch CPU.
+
+Python appears in this repo only to *test* the port: `tools/` regenerates the
+golden fixtures and baseline benchmarks from a reference checkout. It is never
+needed to build or run whisper-candle.
 
 ```bash
-cargo test -p whisper-candle-core
-```
-
-Model parity suite (downloads whisper-tiny, ~150 MB, once):
-
-```bash
+cargo test -p whisper-candle-core                # fast golden tests, no network
 cargo test -p whisper-candle-core --release --features accelerate \
-    --test model_goldens -- --ignored
+    --test model_goldens -- --ignored            # parity suite (downloads whisper-tiny)
 ```
 
-To regenerate fixtures or the Python baseline numbers
-(`tests/fixtures/bench_python*.json`), see `tools/gen_fixtures.py` and
-`tools/bench_python.py` — both run against a checkout of openai/whisper.
+## Provenance
+
+This port was generated with [Claude Code](https://claude.com/claude-code)
+(Claude Fable 5), guided by golden-fixture TDD against openai/whisper.
 
 ## License
 
-MIT. `crates/whisper-core/src/nn.rs` is derived from candle-transformers
+MIT. `crates/whisper-core/src/nn.rs` derives from candle-transformers
 (Apache-2.0/MIT); tokenizer vocabularies and mel filterbanks are from
 openai/whisper (MIT).

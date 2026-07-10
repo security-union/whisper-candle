@@ -6,8 +6,12 @@ pub fn fixtures_dir() -> PathBuf {
 
 pub fn load_json(name: &str) -> serde_json::Value {
     let path = fixtures_dir().join(name);
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("missing fixture {} ({e}); run tools/gen_fixtures.py", path.display()));
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "missing fixture {} ({e}); run tools/gen_fixtures.py",
+            path.display()
+        )
+    });
     serde_json::from_str(&text).expect("invalid fixture json")
 }
 

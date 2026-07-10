@@ -43,7 +43,12 @@ impl WhisperModel {
             VarBuilder::from_mmaped_safetensors(&[weights_path.as_ref()], DType::F32, device)?
         };
         let inner = Inner::F32(nn::Whisper::load(&vb, config.clone())?);
-        Ok(Self { inner, config, device: device.clone(), alignment_heads: None })
+        Ok(Self {
+            inner,
+            config,
+            device: device.clone(),
+            alignment_heads: None,
+        })
     }
 
     /// Load a GGUF-quantized model (see `quantize::quantize_to_gguf`).
@@ -57,7 +62,12 @@ impl WhisperModel {
         )?;
         let vb = nn::QVarBuilder::from_gguf(gguf_path.as_ref(), device)?;
         let inner = Inner::Quantized(nn::Whisper::load_gguf(&vb, config.clone())?);
-        Ok(Self { inner, config, device: device.clone(), alignment_heads: None })
+        Ok(Self {
+            inner,
+            config,
+            device: device.clone(),
+            alignment_heads: None,
+        })
     }
 
     /// Read `alignment_heads` from a generation_config.json if it has them.
@@ -100,7 +110,10 @@ impl WhisperModel {
         tokens: &Tensor,
         audio_features: &Tensor,
     ) -> Result<(Tensor, Vec<Tensor>)> {
-        Ok(dispatch!(self, decoder_forward_with_cross_qk(tokens, audio_features))?)
+        Ok(dispatch!(
+            self,
+            decoder_forward_with_cross_qk(tokens, audio_features)
+        )?)
     }
 
     pub fn is_multilingual(&self) -> bool {
@@ -127,8 +140,16 @@ impl WhisperModel {
     /// Incremental decoder forward -> hidden states (batch, seq, d_model).
     /// Pass the full prompt with `flush = true` on the first call, then only
     /// the newly sampled token(s) with `flush = false`.
-    pub fn decoder_forward(&mut self, tokens: &Tensor, audio_features: &Tensor, flush: bool) -> Result<Tensor> {
-        Ok(dispatch!(self, decoder_forward(tokens, audio_features, flush))?)
+    pub fn decoder_forward(
+        &mut self,
+        tokens: &Tensor,
+        audio_features: &Tensor,
+        flush: bool,
+    ) -> Result<Tensor> {
+        Ok(dispatch!(
+            self,
+            decoder_forward(tokens, audio_features, flush)
+        )?)
     }
 
     /// Project hidden states to vocabulary logits.

@@ -1,0 +1,14 @@
+[workspace]
+changelog_update = true
+git_tag_enable = true
+git_release_enable = true
+# release both crates together; core must publish before the cli that depends on it
+release_always = false
+
+[[package]]
+name = "whisper-candle-core"
+changelog_path = "crates/whisper-core/CHANGELOG.md"
+
+[[package]]
+name = "whisper-candle-cli"
+changelog_path = "crates/whisper-cli/CHANGELOG.md"

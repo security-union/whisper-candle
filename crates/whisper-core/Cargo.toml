@@ -4,7 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Pure-Rust OpenAI Whisper inference on candle (no C/C++ bindings)"
+description = "Pure-Rust OpenAI Whisper inference on candle — no Python, no PyTorch, no C/C++ bindings"
+readme = "../../README.md"
+keywords = ["whisper", "speech-to-text", "asr", "candle", "transcription"]
+categories = ["multimedia::audio", "science"]
 
 [lib]
 name = "whisper_core"

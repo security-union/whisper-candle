@@ -15,8 +15,14 @@ fn tokenizer_matches_python_goldens() {
     assert_eq!(tok.sot_prev as u64, g["sot_prev"].as_u64().unwrap());
     assert_eq!(tok.sot_lm as u64, g["sot_lm"].as_u64().unwrap());
     assert_eq!(tok.no_speech as u64, g["no_speech"].as_u64().unwrap());
-    assert_eq!(tok.no_timestamps as u64, g["no_timestamps"].as_u64().unwrap());
-    assert_eq!(tok.timestamp_begin as u64, g["timestamp_begin"].as_u64().unwrap());
+    assert_eq!(
+        tok.no_timestamps as u64,
+        g["no_timestamps"].as_u64().unwrap()
+    );
+    assert_eq!(
+        tok.timestamp_begin as u64,
+        g["timestamp_begin"].as_u64().unwrap()
+    );
     assert_eq!(tok.transcribe as u64, g["transcribe"].as_u64().unwrap());
     assert_eq!(tok.translate as u64, g["translate"].as_u64().unwrap());
     assert_eq!(
@@ -25,10 +31,17 @@ fn tokenizer_matches_python_goldens() {
     );
 
     let expect_u32 = |v: &serde_json::Value| -> Vec<u32> {
-        v.as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as u32).collect()
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_u64().unwrap() as u32)
+            .collect()
     };
 
-    assert_eq!(tok.sot_sequence, expect_u32(&g["sot_sequence_en_transcribe"]));
+    assert_eq!(
+        tok.sot_sequence,
+        expect_u32(&g["sot_sequence_en_transcribe"])
+    );
     assert_eq!(
         tok.sot_sequence_including_notimestamps(),
         expect_u32(&g["sot_sequence_including_notimestamps"])
@@ -37,7 +50,11 @@ fn tokenizer_matches_python_goldens() {
     // compare the token<->code correspondence instead.
     let fixture_tokens = expect_u32(&g["all_language_tokens"]);
     let fixture_codes: Vec<String> = g["all_language_codes"]
-        .as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
     let mut expected_pairs: Vec<(u32, String)> =
         fixture_tokens.iter().copied().zip(fixture_codes).collect();
     expected_pairs.sort();
@@ -49,23 +66,39 @@ fn tokenizer_matches_python_goldens() {
     actual_pairs.sort();
     assert_eq!(actual_pairs, expected_pairs, "language token/code mapping");
 
-    assert_eq!(tok.non_speech_tokens(), expect_u32(&g["non_speech_tokens"]), "non_speech_tokens");
+    assert_eq!(
+        tok.non_speech_tokens(),
+        expect_u32(&g["non_speech_tokens"]),
+        "non_speech_tokens"
+    );
 
     for case in g["encode_cases"].as_array().unwrap() {
         let text = case["text"].as_str().unwrap();
         let expected = expect_u32(&case["tokens"]);
         assert_eq!(tok.encode(text), expected, "encode({text:?})");
         // decode round-trips for plain text
-        assert_eq!(tok.decode(&expected), text, "decode round-trip for {text:?}");
+        assert_eq!(
+            tok.decode(&expected),
+            text,
+            "decode round-trip for {text:?}"
+        );
     }
 
     // word splitting
     let split = &g["split_to_word_tokens"];
     let input = expect_u32(&split["input_tokens"]);
     let expected_words: Vec<String> = split["words"]
-        .as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
     let expected_tokens: Vec<Vec<u32>> = split["word_tokens"]
-        .as_array().unwrap().iter().map(expect_u32).collect();
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(expect_u32)
+        .collect();
     let (words, word_tokens) = tok.split_to_word_tokens(&input);
     assert_eq!(words, expected_words);
     assert_eq!(word_tokens, expected_tokens);

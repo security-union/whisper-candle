@@ -40,12 +40,27 @@ impl WhichModel {
     }
 
     pub fn is_multilingual(&self) -> bool {
-        !matches!(self, Self::TinyEn | Self::BaseEn | Self::SmallEn | Self::MediumEn)
+        !matches!(
+            self,
+            Self::TinyEn | Self::BaseEn | Self::SmallEn | Self::MediumEn
+        )
     }
 
     pub const ALL_NAMES: &'static [&'static str] = &[
-        "tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en",
-        "large-v1", "large-v2", "large-v3", "large", "large-v3-turbo", "turbo",
+        "tiny",
+        "tiny.en",
+        "base",
+        "base.en",
+        "small",
+        "small.en",
+        "medium",
+        "medium.en",
+        "large-v1",
+        "large-v2",
+        "large-v3",
+        "large",
+        "large-v3-turbo",
+        "turbo",
     ];
 }
 
@@ -85,5 +100,9 @@ pub fn fetch_model(which: WhichModel) -> Result<ModelFiles> {
     let config = repo.get("config.json")?;
     let weights = repo.get("model.safetensors")?;
     let generation_config = repo.get("generation_config.json").ok();
-    Ok(ModelFiles { config, weights, generation_config })
+    Ok(ModelFiles {
+        config,
+        weights,
+        generation_config,
+    })
 }

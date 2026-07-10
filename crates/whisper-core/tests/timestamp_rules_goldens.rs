@@ -28,12 +28,22 @@ fn timestamp_rules_match_python() {
     for (idx, case) in meta["cases"].as_object().unwrap() {
         let name = case["name"].as_str().unwrap();
         let ctx: Vec<u32> = case["tokens"]
-            .as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as u32).collect();
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap() as u32)
+            .collect();
 
         let mut logits: Vec<f32> = tensors[&format!("logits_in_{idx}")]
-            .flatten_all().unwrap().to_vec1().unwrap();
+            .flatten_all()
+            .unwrap()
+            .to_vec1()
+            .unwrap();
         let expected: Vec<f32> = tensors[&format!("logits_out_{idx}")]
-            .flatten_all().unwrap().to_vec1().unwrap();
+            .flatten_all()
+            .unwrap()
+            .to_vec1()
+            .unwrap();
 
         apply_timestamp_rules(&mut logits, &ctx, &rules);
 

@@ -123,8 +123,13 @@ pub fn detect_language(
 
 /// Logit filters, applied in-place per batch row. Port of decoding.py:423-505.
 enum LogitFilter {
-    SuppressBlank { tokens: Vec<u32>, sample_begin: usize },
-    SuppressTokens { tokens: Vec<u32> },
+    SuppressBlank {
+        tokens: Vec<u32>,
+        sample_begin: usize,
+    },
+    SuppressTokens {
+        tokens: Vec<u32>,
+    },
     TimestampRules(TimestampRules),
 }
 
@@ -139,7 +144,10 @@ pub struct TimestampRules {
 impl LogitFilter {
     fn apply(&self, logits: &mut [f32], ctx: &[u32]) {
         match self {
-            Self::SuppressBlank { tokens, sample_begin } => {
+            Self::SuppressBlank {
+                tokens,
+                sample_begin,
+            } => {
                 if ctx.len() == *sample_begin {
                     for &t in tokens {
                         logits[t as usize] = f32::NEG_INFINITY;
@@ -211,7 +219,10 @@ pub fn apply_timestamp_rules(logits: &mut [f32], ctx: &[u32], r: &TimestampRules
     // sample a timestamp
     let logprobs = log_softmax(logits);
     let timestamp_logprob = logsumexp(&logprobs[ts..]);
-    let max_text = logprobs[..ts].iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let max_text = logprobs[..ts]
+        .iter()
+        .copied()
+        .fold(f32::NEG_INFINITY, f32::max);
     if timestamp_logprob > max_text {
         for v in logits[..ts].iter_mut() {
             *v = f32::NEG_INFINITY;
@@ -236,9 +247,14 @@ fn logsumexp(logprobs: &[f32]) -> f32 {
 }
 
 enum DecoderKind {
-    Greedy { temperature: f64 },
+    Greedy {
+        temperature: f64,
+    },
     /// Port of `decoding.py::BeamSearchDecoder` (beam ignores temperature).
-    Beam { beam_size: usize, max_candidates: usize },
+    Beam {
+        beam_size: usize,
+        max_candidates: usize,
+    },
 }
 
 pub struct DecodingTask<'a> {
@@ -283,9 +299,14 @@ impl<'a> DecodingTask<'a> {
                 if max_candidates == 0 {
                     bail!("invalid beam size ({beam_size}) or patience ({patience})");
                 }
-                DecoderKind::Beam { beam_size, max_candidates }
+                DecoderKind::Beam {
+                    beam_size,
+                    max_candidates,
+                }
             }
-            None => DecoderKind::Greedy { temperature: options.temperature },
+            None => DecoderKind::Greedy {
+                temperature: options.temperature,
+            },
         };
         let n_group = options.beam_size.or(options.best_of).unwrap_or(1);
         let n_ctx = model.n_text_ctx();
@@ -330,7 +351,10 @@ impl<'a> DecodingTask<'a> {
         if options.suppress_blank {
             let mut blank = tokenizer.encode(" ");
             blank.push(tokenizer.eot);
-            filters.push(LogitFilter::SuppressBlank { tokens: blank, sample_begin });
+            filters.push(LogitFilter::SuppressBlank {
+                tokens: blank,
+                sample_begin,
+            });
         }
         {
             // _get_suppress_tokens
@@ -466,7 +490,10 @@ impl<'a> DecodingTask<'a> {
                     }
                     all_eot
                 }
-                DecoderKind::Beam { beam_size, max_candidates } => beam_update(
+                DecoderKind::Beam {
+                    beam_size,
+                    max_candidates,
+                } => beam_update(
                     self.model,
                     &mut rows,
                     &mut sum_logprobs,
@@ -492,9 +519,7 @@ impl<'a> DecodingTask<'a> {
                     // not enough finished sequences: pad with the best
                     // unfinished rows, eot-terminated (decoding.py::finalize)
                     let mut order: Vec<usize> = (0..rows.len()).collect();
-                    order.sort_by(|&a, &b| {
-                        sum_logprobs[b].partial_cmp(&sum_logprobs[a]).unwrap()
-                    });
+                    order.sort_by(|&a, &b| sum_logprobs[b].partial_cmp(&sum_logprobs[a]).unwrap());
                     for j in order {
                         if cands.len() >= beam_size {
                             break;
@@ -630,10 +655,7 @@ fn topk(values: &[f32], k: usize) -> Vec<(u32, f32)> {
     let mut top: Vec<(u32, f32)> = Vec::with_capacity(k + 1);
     for (i, &v) in values.iter().enumerate() {
         if top.len() < k || v > top[top.len() - 1].1 {
-            let pos = top
-                .iter()
-                .position(|&(_, tv)| v > tv)
-                .unwrap_or(top.len());
+            let pos = top.iter().position(|&(_, tv)| v > tv).unwrap_or(top.len());
             top.insert(pos, (i as u32, v));
             if top.len() > k {
                 top.pop();

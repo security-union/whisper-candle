@@ -96,7 +96,12 @@ impl OutputFormat {
     }
 
     /// Write `<output_dir>/<audio_stem>.<ext>`.
-    pub fn write_for(&self, result: &TranscribeResult, audio_path: &Path, output_dir: &Path) -> Result<std::path::PathBuf> {
+    pub fn write_for(
+        &self,
+        result: &TranscribeResult,
+        audio_path: &Path,
+        output_dir: &Path,
+    ) -> Result<std::path::PathBuf> {
         let stem = audio_path
             .file_stem()
             .and_then(|s| s.to_str())

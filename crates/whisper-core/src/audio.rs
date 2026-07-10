@@ -56,7 +56,12 @@ pub fn load_audio<P: AsRef<Path>>(path: P) -> Result<Vec<f32>> {
         hint.with_extension(ext);
     }
     let probed = symphonia::default::get_probe()
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
         .context("unsupported audio format")?;
     let mut format = probed.format;
 
@@ -74,7 +79,10 @@ pub fn load_audio<P: AsRef<Path>>(path: P) -> Result<Vec<f32>> {
         .map(|c| c.count())
         .unwrap_or(1)
         .max(1);
-    let sample_rate = track.codec_params.sample_rate.context("unknown sample rate")? as usize;
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .context("unknown sample rate")? as usize;
 
     let mut pcm: Vec<f32> = Vec::new();
     let mut sample_buf: Option<SampleBuffer<f32>> = None;
@@ -123,7 +131,9 @@ pub fn load_audio<P: AsRef<Path>>(path: P) -> Result<Vec<f32>> {
 /// the filter delay and trimming to the exact expected sample count
 /// (round(len * to/from), matching ffmpeg's output length).
 pub fn resample(input: &[f32], from_rate: usize, to_rate: usize) -> Result<Vec<f32>> {
-    use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
+    use rubato::{
+        Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+    };
 
     let ratio = to_rate as f64 / from_rate as f64;
     const SINC_LEN: usize = 256;
@@ -261,5 +271,9 @@ pub fn log_mel_spectrogram(audio: &[f32], n_mels: usize, padding: usize) -> Resu
         *v = (v.max(max - 8.0) + 4.0) / 4.0;
     }
 
-    Ok(MelSpectrogram { data: mel, n_mels, n_frames })
+    Ok(MelSpectrogram {
+        data: mel,
+        n_mels,
+        n_frames,
+    })
 }

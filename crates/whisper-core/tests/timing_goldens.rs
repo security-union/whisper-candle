@@ -36,12 +36,18 @@ fn median_filter_matches_pytorch() {
     for i in 0..3 {
         let input = &t[&format!("medfilt_in_{i}")];
         let width = t[&format!("medfilt_width_{i}")]
-            .flatten_all().unwrap().to_vec1::<i64>().unwrap()[0] as usize;
+            .flatten_all()
+            .unwrap()
+            .to_vec1::<i64>()
+            .unwrap()[0] as usize;
         let dims = input.dims().to_vec();
         let n_cols = *dims.last().unwrap();
         let mut data: Vec<f32> = input.flatten_all().unwrap().to_vec1().unwrap();
         let expected: Vec<f32> = t[&format!("medfilt_out_{i}")]
-            .flatten_all().unwrap().to_vec1().unwrap();
+            .flatten_all()
+            .unwrap()
+            .to_vec1()
+            .unwrap();
 
         median_filter_rows(&mut data, n_cols, width);
         assert_eq!(data.len(), expected.len(), "case {i}: length");

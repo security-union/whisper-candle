@@ -7,7 +7,10 @@ use whisper_core::writers::OutputFormat;
 use whisper_core::{DecodingOptions, Task, TranscribeOptions};
 
 #[derive(Parser, Debug)]
-#[command(name = "whisper-candle", about = "Pure-Rust Whisper transcription on candle")]
+#[command(
+    name = "whisper-candle",
+    about = "Pure-Rust Whisper transcription on candle"
+)]
 struct Args {
     /// Audio file(s) to transcribe
     #[arg(required = true)]
