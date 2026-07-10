@@ -8,8 +8,24 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::whisper::Config;
 use std::path::Path;
 
+enum Inner {
+    F32(nn::Whisper<candle_nn::Linear, candle_nn::Linear>),
+    /// Hybrid: f32 encoder (BLAS prefill) + quantized decoder.
+    Quantized(nn::Whisper<candle_nn::Linear, nn::QLinear>),
+}
+
+/// Dispatch a method call to whichever variant is loaded.
+macro_rules! dispatch {
+    ($self:expr, $m:ident ( $($arg:expr),* )) => {
+        match &mut $self.inner {
+            Inner::F32(w) => w.$m($($arg),*),
+            Inner::Quantized(w) => w.$m($($arg),*),
+        }
+    };
+}
+
 pub struct WhisperModel {
-    inner: nn::Whisper,
+    inner: Inner,
     pub config: Config,
     pub device: Device,
     /// (layer, head) pairs of cross-attention heads correlated with word
@@ -26,7 +42,21 @@ impl WhisperModel {
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[weights_path.as_ref()], DType::F32, device)?
         };
-        let inner = nn::Whisper::load(&vb, config.clone())?;
+        let inner = Inner::F32(nn::Whisper::load(&vb, config.clone())?);
+        Ok(Self { inner, config, device: device.clone(), alignment_heads: None })
+    }
+
+    /// Load a GGUF-quantized model (see `quantize::quantize_to_gguf`).
+    pub fn load_quantized<P: AsRef<Path>>(
+        config_path: P,
+        gguf_path: P,
+        device: &Device,
+    ) -> Result<Self> {
+        let config: Config = serde_json::from_str(
+            &std::fs::read_to_string(config_path.as_ref()).context("reading config.json")?,
+        )?;
+        let vb = nn::QVarBuilder::from_gguf(gguf_path.as_ref(), device)?;
+        let inner = Inner::Quantized(nn::Whisper::load_gguf(&vb, config.clone())?);
         Ok(Self { inner, config, device: device.clone(), alignment_heads: None })
     }
 
@@ -70,7 +100,7 @@ impl WhisperModel {
         tokens: &Tensor,
         audio_features: &Tensor,
     ) -> Result<(Tensor, Vec<Tensor>)> {
-        Ok(self.inner.decoder.forward_with_cross_qk(tokens, audio_features)?)
+        Ok(dispatch!(self, decoder_forward_with_cross_qk(tokens, audio_features))?)
     }
 
     pub fn is_multilingual(&self) -> bool {
@@ -91,19 +121,22 @@ impl WhisperModel {
 
     /// Encode a mel window (batch, n_mels, n_frames) -> (batch, n_audio_ctx, d_model).
     pub fn encoder_forward(&mut self, mel: &Tensor, flush: bool) -> Result<Tensor> {
-        Ok(self.inner.encoder.forward(mel, flush)?)
+        Ok(dispatch!(self, encoder_forward(mel, flush))?)
     }
 
     /// Incremental decoder forward -> hidden states (batch, seq, d_model).
     /// Pass the full prompt with `flush = true` on the first call, then only
     /// the newly sampled token(s) with `flush = false`.
     pub fn decoder_forward(&mut self, tokens: &Tensor, audio_features: &Tensor, flush: bool) -> Result<Tensor> {
-        Ok(self.inner.decoder.forward(tokens, audio_features, flush)?)
+        Ok(dispatch!(self, decoder_forward(tokens, audio_features, flush))?)
     }
 
     /// Project hidden states to vocabulary logits.
     pub fn decoder_final_linear(&self, hidden: &Tensor) -> Result<Tensor> {
-        Ok(self.inner.decoder.final_linear(hidden)?)
+        match &self.inner {
+            Inner::F32(w) => Ok(w.decoder.final_linear(hidden)?),
+            Inner::Quantized(w) => Ok(w.decoder.final_linear(hidden)?),
+        }
     }
 
     /// Logits at a single sequence position: (batch, vocab).
@@ -113,11 +146,14 @@ impl WhisperModel {
     }
 
     pub fn reset_kv_cache(&mut self) {
-        self.inner.reset_kv_cache();
+        match &mut self.inner {
+            Inner::F32(w) => w.reset_kv_cache(),
+            Inner::Quantized(w) => w.reset_kv_cache(),
+        }
     }
 
     /// Reorder decoder self-attention KV caches for beam search.
     pub fn rearrange_kv_cache(&mut self, source_indices: &[usize]) -> Result<()> {
-        Ok(self.inner.decoder.rearrange_kv_cache(source_indices)?)
+        Ok(dispatch!(self, rearrange_kv_cache(source_indices))?)
     }
 }

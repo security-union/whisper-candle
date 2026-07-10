@@ -236,6 +236,41 @@ fn word_timestamps_match_pytorch() {
 
 #[test]
 #[ignore = "downloads whisper-tiny"]
+fn quantized_q8_0_transcription() {
+    // q8_0 is near-lossless; the transcript text should match the f32 golden
+    let g = load_json("decode_goldens_tiny.json");
+    let expected_text = g["transcribe"]["text"].as_str().unwrap();
+
+    let files = whisper_core::fetch_model(whisper_core::WhichModel::Tiny).unwrap();
+    let gguf = std::env::temp_dir().join("whisper-candle-test-tiny-q8_0.gguf");
+    let (q, kept) =
+        whisper_core::quantize::quantize_to_gguf(&files.weights, &gguf, "q8_0".parse().unwrap())
+            .unwrap();
+    eprintln!("quantized {q} tensors, kept {kept} f32");
+    assert!(q > 50, "most weight matrices should quantize");
+
+    let mut model =
+        whisper_core::WhisperModel::load_quantized(&files.config, &gguf, &Device::Cpu).unwrap();
+    let options = TranscribeOptions {
+        temperatures: vec![0.0],
+        decode_options: DecodingOptions {
+            language: Some("en".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let pcm = Tensor::read_npy(fixtures_dir().join("audio_jfk_pcm.npy"))
+        .unwrap()
+        .to_vec1::<f32>()
+        .unwrap();
+    let result = whisper_core::transcribe(&mut model, &pcm, &options).unwrap();
+    eprintln!("text: {}", result.text);
+    assert_eq!(result.text.trim(), expected_text.trim(), "q8_0 transcript");
+    let _ = std::fs::remove_file(&gguf);
+}
+
+#[test]
+#[ignore = "downloads whisper-tiny"]
 fn end_to_end_flac_transcription() {
     // full pipeline including symphonia decode + rubato resample; asserts the
     // transcript text only (audio path is not sample-exact vs ffmpeg)

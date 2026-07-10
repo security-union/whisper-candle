@@ -27,6 +27,21 @@ Models download automatically from the Hugging Face Hub (safetensors) into
 `~/.cache/huggingface` on first use. Supported: `tiny`, `base`, `small`,
 `medium`, `large-v1/v2/v3`, `turbo`, and the `.en` variants.
 
+### Quantized models
+
+```bash
+whisper-candle audio.mp3 --model turbo --quantization q4k
+```
+
+Quantizes the HF f32 weights locally on first use (GGUF cached under
+`~/.cache/whisper-candle/`, e.g. turbo q4k ≈ 0.5 GB vs 1.6 GB f32) and runs a
+hybrid model: f32 encoder (BLAS is much faster for the big prefill GEMMs) +
+quantized decoder. Supported dtypes: `q4_0 q4_1 q5_0 q5_1 q8_0 q2k q3k q4k
+q5k q6k`. `q8_0` is near-lossless (matches the f32 transcript on the test
+fixtures). Note: on machines with a fast BLAS, quantization trades some speed
+for a ~3-6x smaller memory/disk footprint — it's a capacity feature, not a
+speed feature.
+
 As a library:
 
 ```rust

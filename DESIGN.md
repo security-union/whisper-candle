@@ -25,7 +25,17 @@
 >   base 4.5s (13×), small 12.3s; Metal tiny 2.4s, base 3.1s, small 8.4s —
 >   Metal wins from base up. Python torch CPU remains ~4× faster (tiny 0.47s,
 >   base 1.0s): the residual gap is per-op overhead in candle's decode path →
->   next levers are fused logit math, fewer allocations, quantized models.
+>   next levers are fused logit math and fewer allocations.
+> - Quantized models done (`--quantization q4k` etc.): HF f32 weights are
+>   quantized locally to GGUF once and cached (`quantize.rs`) — no dependence
+>   on third-party GGUF uploads, works for every size. Runtime is hybrid:
+>   **f32 encoder** (BLAS beats qmatmul ~14× on the 1500-frame prefill GEMMs;
+>   fully-quantized encoders ran 2.1s vs 0.15s on base) + **quantized decoder**.
+>   K-quant-incompatible shapes (d_model=384) fall back to q8_0, never to F32
+>   QMatMul (slow broadcast path). q8_0 reproduces the f32 transcript exactly
+>   on the fixtures. On this machine quantization is a memory/disk feature
+>   (turbo: 0.5 GB vs 1.6 GB), not a speed feature — candle's qmatmul kernels
+>   trail Accelerate BLAS.
 > - Known accepted deviations: resampled audio is not sample-exact vs ffmpeg
 >   (different sinc filters, fractional delay; RMS ≈ 0.02 on jfk.flac);
 >   compression_ratio uses zlib-rs (within ~2% of C zlib — only feeds the

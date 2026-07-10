@@ -21,6 +21,11 @@ struct Args {
     #[arg(long, default_value = "cpu")]
     device: String,
 
+    /// Run a locally-quantized model: q4_0, q4_1, q5_0, q5_1, q8_0, q2k..q6k.
+    /// Quantizes the HF weights once and caches the GGUF.
+    #[arg(long)]
+    quantization: Option<String>,
+
     /// Directory to save the outputs
     #[arg(long, short, default_value = ".")]
     output_dir: PathBuf,
@@ -97,7 +102,10 @@ fn main() -> Result<()> {
     let device = whisper_core::device(&args.device)?;
     eprintln!("loading model {} ...", args.model);
     let start = std::time::Instant::now();
-    let mut model = whisper_core::load_model(&args.model, &device)?;
+    let mut model = match &args.quantization {
+        Some(q) => whisper_core::load_model_quantized(&args.model, q.parse()?, &device)?,
+        None => whisper_core::load_model(&args.model, &device)?,
+    };
     eprintln!("model loaded in {:.1}s", start.elapsed().as_secs_f32());
 
     let language = args

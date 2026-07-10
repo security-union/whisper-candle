@@ -10,9 +10,13 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let audio_path = args.get(1).map(String::as_str).unwrap_or("tests/fixtures/jfk_60s.wav");
     let model_name = args.get(2).map(String::as_str).unwrap_or("tiny");
+    let quantization = args.get(3).map(String::as_str);
 
     let device = Device::Cpu;
-    let mut model = whisper_core::load_model(model_name, &device)?;
+    let mut model = match quantization {
+        Some(q) => whisper_core::load_model_quantized(model_name, q.parse()?, &device)?,
+        None => whisper_core::load_model(model_name, &device)?,
+    };
     let tokenizer = get_tokenizer(model.is_multilingual(), model.num_languages(), Some("en"), Some(Task::Transcribe))?;
 
     let t0 = Instant::now();
