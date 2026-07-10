@@ -14,7 +14,7 @@ name = "whisper-candle"
 path = "src/main.rs"
 
 [dependencies]
-whisper-candle-core = { path = "../whisper-core" }
+whisper-candle-core = { path = "../whisper-core", version = "0.1.0" }
 candle-core = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
