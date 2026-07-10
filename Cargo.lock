@@ -3167,7 +3167,7 @@ dependencies = [
 
 [[package]]
 name = "whisper-candle-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3179,7 +3179,7 @@ dependencies = [
 
 [[package]]
 name = "whisper-candle-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "approx",
